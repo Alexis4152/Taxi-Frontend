@@ -1,0 +1,115 @@
+@import "tailwindcss";
+@import "@fontsource/manrope/600.css";
+@import "@fontsource/manrope/700.css";
+@import "@fontsource/manrope/800.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Manrope", "Inter", system-ui, sans-serif;
+
+  --color-brand-50: #eef6ff;
+  --color-brand-100: #dbeeff;
+  --color-brand-200: #b3ddff;
+  --color-brand-300: #7dc2ff;
+  --color-brand-400: #4aa8ff;
+  --color-brand-500: #2b84f5;
+  --color-brand-600: #155dea;
+  --color-brand-700: #0d3fb0;
+  --color-brand-800: #0a2f86;
+  --color-brand-900: #082463;
+
+  --color-ink-50: #f6f7f9;
+  --color-ink-100: #eceef2;
+  --color-ink-200: #d7dbe3;
+  --color-ink-300: #b4bbc9;
+  --color-ink-400: #8a94a8;
+  --color-ink-500: #6b7690;
+  --color-ink-600: #545e76;
+  --color-ink-700: #414960;
+  --color-ink-800: #262c3d;
+  --color-ink-900: #14171f;
+  --color-ink-950: #0b0d13;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-ink-50);
+  color: var(--color-ink-900);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS Safari hace zoom automatico al enfocar un input con font-size menor a 16px. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* Franjas fijas (header/bottom bar) respetan el notch y el home indicator. */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
+}
+
+::selection {
+  background-color: var(--color-brand-200);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: var(--color-ink-200);
+  border-radius: 9999px;
+}
+
+/* Loader de marca (PageLoader): la barrita corre de un lado a otro debajo del logo. */
+@keyframes loader-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+/* Entrada suave para tarjetas/paneles que aparecen (viaje aceptado, ofertas, modales). */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.25s ease-out;
+}
