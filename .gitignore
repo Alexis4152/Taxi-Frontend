@@ -23,3 +23,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Variables locales (.env.production SI se versiona: lleva las URLs publicas del backend)
+.env.local
+.env.*.local
+.claude/
