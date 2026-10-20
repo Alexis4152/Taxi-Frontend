@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { setAccessToken } from '../api/axios'
+import { setAccessToken, getRefreshToken, setRefreshToken } from '../api/axios'
 import * as authApi from '../api/auth'
 
 const AuthContext = createContext(null)
@@ -9,14 +9,24 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // El refresh token vive en sessionStorage (aislado por pestaña) - si esta pestaña no tiene
+    // uno guardado, ni vale la pena pedirle sesion al backend (fallaria igual con 401): es una
+    // pestaña nueva que nunca inicio sesion, debe mostrar el login directo.
+    const storedRefreshToken = getRefreshToken()
+    if (!storedRefreshToken) {
+      setLoading(false)
+      return
+    }
     authApi
-      .refreshSession()
+      .refreshSession(storedRefreshToken)
       .then(({ data }) => {
         setAccessToken(data.data.accessToken)
+        setRefreshToken(data.data.refreshToken)
         setUser(data.data.user)
       })
       .catch(() => {
         setAccessToken(null)
+        setRefreshToken(null)
         setUser(null)
       })
       .finally(() => setLoading(false))
@@ -24,6 +34,7 @@ export function AuthProvider({ children }) {
 
   const applyAuthResult = useCallback((authResponse) => {
     setAccessToken(authResponse.accessToken)
+    setRefreshToken(authResponse.refreshToken)
     setUser(authResponse.user)
   }, [])
 
@@ -59,9 +70,10 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      await authApi.logout()
+      await authApi.logout(getRefreshToken())
     } finally {
       setAccessToken(null)
+      setRefreshToken(null)
       setUser(null)
     }
   }, [])

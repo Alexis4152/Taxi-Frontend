@@ -9,4 +9,5 @@ export const cancelTrip = (id, reason) => api.post(`/api/trips/${id}/cancel`, re
 export const nearbyDrivers = (lat, lng) => api.get('/api/trips/nearby-drivers', { params: { lat, lng } })
 export const getTripMessages = (id) => api.get(`/api/trips/${id}/messages`)
 export const sendTripMessage = (id, body) => api.post(`/api/trips/${id}/messages`, { body })
+export const reportTrip = (id, data) => api.post(`/api/trips/${id}/reports`, data)
 export const getPublicTrip = (shareToken) => api.get(`/api/public/trips/${shareToken}`)

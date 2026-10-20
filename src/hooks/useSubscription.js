@@ -10,13 +10,18 @@ export function useSubscription(topic, onMessage, enabled = true) {
     let unsubscribe = null
     let cancelled = false
 
-    subscribe(topic, (payload) => callbackRef.current(payload)).then((unsub) => {
-      if (cancelled) {
-        unsub()
-      } else {
-        unsubscribe = unsub
-      }
-    })
+    subscribe(topic, (payload) => callbackRef.current(payload))
+      .then((unsub) => {
+        if (cancelled) {
+          unsub()
+        } else {
+          unsubscribe = unsub
+        }
+      })
+      // Un CONNECT/SUBSCRIBE rechazado (ej. token aun no listo, o el usuario ya no es dueno de
+      // este topic) no debe quedar como promesa sin atrapar - el propio stomp.js ya reintenta la
+      // conexion solo.
+      .catch(() => {})
 
     return () => {
       cancelled = true

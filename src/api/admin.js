@@ -46,6 +46,10 @@ export const listTaxiChangeRequests = () => api.get('/api/admin/taxi-change-requ
 export const approveTaxiChangeRequest = (id) => api.post(`/api/admin/taxi-change-requests/${id}/approve`)
 export const rejectTaxiChangeRequest = (id) => api.post(`/api/admin/taxi-change-requests/${id}/reject`)
 
+// Reportes de viaje (pasajero u operador reportando un problema en un viaje especifico)
+export const listTripReports = () => api.get('/api/admin/trip-reports')
+export const resolveTripReport = (id) => api.post(`/api/admin/trip-reports/${id}/resolve`)
+
 // Usuarios (pasajeros, solo SUPER_ADMIN)
 export const listPassengers = () => api.get('/api/admin/passengers')
 export const setPassengerActive = (id, active) =>

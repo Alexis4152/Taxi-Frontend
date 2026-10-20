@@ -4,10 +4,10 @@ export default function Modal({ open, onClose, title, subtitle, children, wide =
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-950/50 p-0 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4">
       <div className="fixed inset-0" onClick={onClose} />
       <div
-        className={`relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl ${
+        className={`relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-xl ${
           wide ? 'sm:max-w-lg' : 'sm:max-w-sm'
         }`}
       >

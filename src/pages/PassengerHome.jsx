@@ -19,6 +19,9 @@ import {
   Share2,
   Sparkles,
   ShieldCheck,
+  Camera,
+  AlertTriangle,
+  UserX,
 } from 'lucide-react'
 import * as passengerApi from '../api/passenger'
 import Layout from '../components/Layout'
@@ -26,6 +29,7 @@ import MapView from '../components/map/MapView'
 import RatingForm from '../components/RatingForm'
 import RatingsModal from '../components/RatingsModal'
 import CancelTripModal from '../components/CancelTripModal'
+import ReportTripModal from '../components/ReportTripModal'
 import ChatPanel from '../components/ChatPanel'
 import { useConfirm } from '../components/ui/ConfirmDialog'
 import DetailListModal from '../components/DetailListModal'
@@ -34,6 +38,7 @@ import TripStatusStepper from '../components/TripStatusStepper'
 import Card, { CardHeader } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
+import StatCard from '../components/ui/StatCard'
 import Modal from '../components/ui/Modal'
 import Switch from '../components/ui/Switch'
 import { Label, Input, Textarea } from '../components/ui/Field'
@@ -44,7 +49,7 @@ import { useSubscription } from '../hooks/useSubscription'
 import { useTripChat } from '../hooks/useTripChat'
 import { useInactivityLogout } from '../hooks/useInactivityLogout'
 import { useAuth } from '../context/AuthContext'
-import { myActiveTripAsPassenger, myPassengerStats, myTripHistory, requestTrip, cancelTrip, nearbyDrivers } from '../api/trips'
+import { myActiveTripAsPassenger, myPassengerStats, myTripHistory, requestTrip, cancelTrip, nearbyDrivers, reportTrip } from '../api/trips'
 import { reverseGeocode, searchAddress, debounce } from '../services/geocodingService'
 import { estimateRoute } from '../services/routingService'
 import { NEARBY_DRIVERS_POLL_MS } from '../config'
@@ -63,18 +68,43 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 
 const debouncedSearch = debounce(searchAddress, 500)
 
-function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory }) {
+function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onUploadPhoto, uploadingPhoto, photoError }) {
+  const fileInputRef = useRef(null)
   if (!profile) return null
   return (
     <Card className="text-center lg:text-left">
       <div className="flex flex-col items-center gap-3 lg:items-start">
-        {profile.photoUrl ? (
-          <img src={`${API_URL}${profile.photoUrl}`} alt="" className="h-20 w-20 rounded-full object-cover" />
-        ) : (
-          <span className="flex h-20 w-20 items-center justify-center rounded-full bg-ink-900 text-2xl font-bold text-white">
-            {profile.name.charAt(0).toUpperCase()}
-          </span>
-        )}
+        <div className="relative">
+          {profile.photoUrl ? (
+            <img src={`${API_URL}${profile.photoUrl}`} alt="" className="h-20 w-20 rounded-full object-cover" />
+          ) : (
+            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-ink-900 text-2xl font-bold text-white">
+              {profile.name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingPhoto}
+            aria-label="Cambiar foto de perfil"
+            className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-ink-900 text-white shadow-sm hover:bg-ink-700 disabled:opacity-60"
+          >
+            {uploadingPhoto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="user"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) onUploadPhoto(file)
+              e.target.value = ''
+            }}
+          />
+        </div>
+        {photoError && <p className="text-[11px] text-red-600">{photoError}</p>}
         <div>
           <p className="text-base font-bold text-ink-900">{profile.name}</p>
           <button
@@ -135,7 +165,7 @@ export default function PassengerHome() {
   const [tripOptionsOpen, setTripOptionsOpen] = useState(false)
   const [tripOptions, setTripOptions] = useState({ babySeat: false, moreThanFourPassengers: false, hasPet: false, comments: '' })
   const [chatOpen, setChatOpen] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyModal, setHistoryModal] = useState(null)
   const [tripHistory, setTripHistory] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
@@ -145,17 +175,38 @@ export default function PassengerHome() {
 
   const loadStats = () => myPassengerStats().then(({ data }) => setStats(data.data)).catch(() => {})
 
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const handleUploadPhoto = async (file) => {
+    setUploadingPhoto(true)
+    setPhotoError('')
+    try {
+      const { data } = await passengerApi.uploadPhoto(file)
+      setProfile((p) => (p ? { ...p, photoUrl: data.data } : p))
+    } catch (err) {
+      setPhotoError(err.response?.data?.message || 'No se pudo subir la foto')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
   const openRatings = () => {
     setRatingsOpen(true)
     setRatingsLoading(true)
     passengerApi.myRatings().then(({ data }) => setRatings(data.data)).finally(() => setRatingsLoading(false))
   }
 
-  const openHistory = () => {
-    setHistoryOpen(true)
-    setHistoryLoading(true)
-    myTripHistory().then(({ data }) => setTripHistory(data.data)).finally(() => setHistoryLoading(false))
+  const isToday = (dateStr) => Boolean(dateStr) && new Date(dateStr).toDateString() === new Date().toDateString()
+
+  const openStatModal = (title, filterFn) => {
+    setHistoryModal({ title, filterFn })
+    if (!tripHistory) {
+      setHistoryLoading(true)
+      myTripHistory().then(({ data }) => setTripHistory(data.data)).finally(() => setHistoryLoading(false))
+    }
   }
+
+  const openHistory = () => openStatModal('Tus viajes', () => true)
 
   useEffect(() => {
     myActiveTripAsPassenger()
@@ -376,6 +427,8 @@ export default function PassengerHome() {
     }
   }
 
+  const [reportTripId, setReportTripId] = useState(null)
+
   const handleShareTrip = async () => {
     if (!activeTrip?.shareToken) return
     const url = `${window.location.origin}/track/${activeTrip.shareToken}`
@@ -506,21 +559,34 @@ export default function PassengerHome() {
       bottomBar={bottomBar}
       sidebar={
         !activeTrip && !finishedTrip && !scheduledTrip && !noDriversTrip ? (
-          <ProfileSidebar profile={profile} totalTrips={stats?.totalTrips} onOpenRatings={openRatings} onOpenHistory={openHistory} />
+          <ProfileSidebar
+            profile={profile}
+            totalTrips={stats?.totalTrips}
+            onOpenRatings={openRatings}
+            onOpenHistory={openHistory}
+            onUploadPhoto={handleUploadPhoto}
+            uploadingPhoto={uploadingPhoto}
+            photoError={photoError}
+          />
         ) : null
       }
     >
       <ConfirmDialogElement />
       <RatingsModal open={ratingsOpen} onClose={() => setRatingsOpen(false)} ratings={ratings} loading={ratingsLoading} title="Tus calificaciones" />
       <CancelTripModal open={cancelOpen} onClose={() => setCancelOpen(false)} onConfirm={handleCancelTrip} busy={cancelBusy} />
+      <ReportTripModal
+        open={Boolean(reportTripId)}
+        onClose={() => setReportTripId(null)}
+        onSubmit={(data) => reportTrip(reportTripId, data)}
+      />
       <DetailListModal
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        title="Tus viajes"
+        open={Boolean(historyModal)}
+        onClose={() => setHistoryModal(null)}
+        title={historyModal?.title}
         loading={historyLoading}
-        items={tripHistory}
-        renderItem={(t) => <TripHistoryRow trip={t} />}
-        emptyMessage="Aún no has solicitado ningún viaje."
+        items={historyModal && tripHistory ? tripHistory.filter(historyModal.filterFn) : null}
+        renderItem={(t) => <TripHistoryRow trip={t} onReport={(trip) => setReportTripId(trip.id)} />}
+        emptyMessage="No hay viajes que coincidan con esto todavía."
       />
       <ChatPanel
         open={chatOpen}
@@ -547,6 +613,34 @@ export default function PassengerHome() {
           <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             {geoError}
+          </div>
+        )}
+
+        {!activeTrip && !finishedTrip && !scheduledTrip && !noDriversTrip && stats && (
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard
+              icon={ListChecks}
+              label="Finalizados hoy"
+              value={stats.tripsCompletedToday}
+              tone="brand"
+              onClick={() => openStatModal('Viajes finalizados hoy', (t) => t.status === 'COMPLETED' && isToday(t.completedAt))}
+            />
+            <StatCard
+              icon={UserX}
+              label="Cancelados por el operador"
+              value={stats.tripsCancelledByDriverToday}
+              onClick={() =>
+                openStatModal('Cancelados por el operador hoy', (t) => t.status === 'CANCELLED' && t.cancelledByRole === 'DRIVER' && isToday(t.cancelledAt))
+              }
+            />
+            <StatCard
+              icon={XCircle}
+              label="Cancelados por mí"
+              value={stats.tripsCancelledByMeToday}
+              onClick={() =>
+                openStatModal('Cancelados por mí hoy', (t) => t.status === 'CANCELLED' && t.cancelledByRole === 'PASSENGER' && isToday(t.cancelledAt))
+              }
+            />
           </div>
         )}
 
@@ -768,6 +862,26 @@ export default function PassengerHome() {
                 {activeTrip.distanceKm} km &middot; ~{Math.round(activeTrip.durationMin)} min &middot;{' '}
                 {activeTrip.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}
               </p>
+
+              {activeTrip.paymentMethod === 'TRANSFER' && activeTrip.driverBankAccount && (
+                <div className="mt-2 flex items-center gap-2 rounded-xl bg-ink-50 px-3 py-2.5 text-xs text-ink-700">
+                  <CreditCard className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                  <span>
+                    Cuenta/CLABE del operador: <span className="font-semibold">{activeTrip.driverBankAccount}</span>
+                  </span>
+                </div>
+              )}
+
+              {activeTrip.driverName && (
+                <button
+                  type="button"
+                  onClick={() => setReportTripId(activeTrip.id)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Reportar un problema
+                </button>
+              )}
 
               <button
                 type="button"

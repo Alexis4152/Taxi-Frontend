@@ -22,6 +22,7 @@ import {
   RefreshCw,
   ClipboardList,
   UserRound,
+  AlertTriangle,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import Card, { CardHeader } from '../components/ui/Card'
@@ -48,6 +49,7 @@ const NAV_SUPER_ADMIN = [
   { key: 'operadores', label: 'Operadores', icon: Users },
   { key: 'taxis', label: 'Taxis', icon: Car },
   { key: 'solicitudes', label: 'Solicitudes de taxi', icon: ClipboardList },
+  { key: 'reportes', label: 'Reportes', icon: AlertTriangle },
   { key: 'tarifas', label: 'Tarifas', icon: Banknote },
   { key: 'usuarios', label: 'Usuarios', icon: UserRound },
   { key: 'mapa', label: 'Mapa en vivo', icon: MapPinned },
@@ -63,9 +65,14 @@ export default function AdminDashboard() {
   const [actingOrgId, setActingOrgId] = useState('')
 
   useEffect(() => {
-    if (isSuperAdmin) {
-      adminApi.listOrganizations().then(({ data }) => setOrganizations(data.data))
-    }
+    if (!isSuperAdmin) return undefined
+    const load = () => adminApi.listOrganizations().then(({ data }) => setOrganizations(data.data))
+    load()
+    // La organizacion de "Operadores Independientes" se crea sola la primera vez que alguien se
+    // autoregistra sin organizacion - si eso pasa despues de que el superadmin ya abrio el
+    // panel, sin este polling nunca aparece en el selector hasta recargar la pagina.
+    const interval = setInterval(load, LIVE_MAP_POLL_MS)
+    return () => clearInterval(interval)
   }, [isSuperAdmin])
 
   // Para un ADMIN normal, el scope siempre es su propia organizacion. Para SUPER_ADMIN, "actua
@@ -96,7 +103,7 @@ export default function AdminDashboard() {
     </nav>
   )
 
-  const needsOrgPicker = isSuperAdmin && !['organizaciones', 'mapa', 'usuarios', 'solicitudes'].includes(tab)
+  const needsOrgPicker = isSuperAdmin && !['organizaciones', 'mapa', 'usuarios', 'solicitudes', 'reportes'].includes(tab)
 
   return (
     <Layout title="Panel de administración" subtitle={isSuperAdmin ? 'Vista global de la plataforma' : user.organizationName} wide sidebar={sidebar}>
@@ -118,6 +125,7 @@ export default function AdminDashboard() {
       {tab === 'operadores' && <DriversSection orgId={orgId} isSuperAdmin={isSuperAdmin} />}
       {tab === 'taxis' && <TaxisSection orgId={orgId} isSuperAdmin={isSuperAdmin} />}
       {tab === 'solicitudes' && <TaxiChangeRequestsSection />}
+      {tab === 'reportes' && <TripReportsSection />}
       {tab === 'tarifas' && <TariffsSection orgId={orgId} isSuperAdmin={isSuperAdmin} organizations={organizations} />}
       {tab === 'usuarios' && isSuperAdmin && <UsersSection />}
       {tab === 'mapa' && <LiveMapSection />}
@@ -366,7 +374,7 @@ function OrganizationDetailModal({ org, onClose, onSaved }) {
         />
       )}
       <form onSubmit={handleSave} className="space-y-4">
-        <PhotoPicker value={logo} onChange={setLogo} existingUrl={org.logoUrl} rounded="rounded-xl" />
+        <PhotoPicker value={logo} onChange={setLogo} existingUrl={photoSrc(org.logoUrl)} rounded="rounded-xl" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Nombre</Label>
@@ -466,11 +474,18 @@ function DriversSection({ orgId, isSuperAdmin }) {
 
   const load = () => adminApi.listDrivers().then(({ data }) => setAllDrivers(data.data))
   const loadOnline = () => adminApi.listOnlineDrivers().then(({ data }) => setOnlineDrivers(data.data))
+  const loadTaxis = () => adminApi.listTaxis().then(({ data }) => setAllTaxis(data.data))
   useEffect(() => {
     load()
     loadOnline()
-    adminApi.listTaxis().then(({ data }) => setAllTaxis(data.data))
-    const interval = setInterval(loadOnline, LIVE_MAP_POLL_MS)
+    loadTaxis()
+    // Un operador puede autoregistrarse mientras esta pestaña ya esta abierta - sin este
+    // polling, el superadmin no lo veria hasta cambiar de pestaña o recargar la pagina.
+    const interval = setInterval(() => {
+      load()
+      loadOnline()
+      loadTaxis()
+    }, LIVE_MAP_POLL_MS)
     return () => clearInterval(interval)
   }, [])
 
@@ -884,7 +899,7 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
         </div>
       )}
       <form onSubmit={handleSave} className="space-y-4">
-        <PhotoPicker value={photo} onChange={setPhoto} existingUrl={driver.photoUrl} />
+        <PhotoPicker value={photo} onChange={setPhoto} existingUrl={photoSrc(driver.photoUrl)} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Nombre</Label>
@@ -973,12 +988,20 @@ function TaxisSection({ orgId, isSuperAdmin }) {
   const { confirm, ConfirmDialogElement } = useConfirm()
 
   const load = () => adminApi.listTaxis().then(({ data }) => setAllTaxis(data.data))
+  const loadDrivers = () => adminApi.listDrivers().then(({ data }) => setAllDrivers(data.data))
   useEffect(() => {
     load()
-    adminApi.listDrivers().then(({ data }) => setAllDrivers(data.data))
+    loadDrivers()
+    // Un taxi puede darse de alta (autoregistro de operador) mientras esta pestaña ya esta
+    // abierta - sin este polling, no se veria hasta cambiar de pestaña o recargar la pagina.
+    const interval = setInterval(() => {
+      load()
+      loadDrivers()
+    }, LIVE_MAP_POLL_MS)
+    return () => clearInterval(interval)
   }, [])
 
-  const taxis = isSuperAdmin ? allTaxis.filter((t) => t.organizationId === orgId) : allTaxis
+  const taxis = isSuperAdmin && orgId ? allTaxis.filter((t) => t.organizationId === orgId) : allTaxis
 
   // Operadores dados de alta en cada taxi, para mostrar cuantos y quienes son en el listado sin
   // tener que entrar al detalle de cada unidad.
@@ -1189,7 +1212,7 @@ function TaxiDetailModal({ taxiId, onClose, onSaved }) {
   return (
     <Modal open onClose={onClose} title={`Unidad ${taxi.unitNumber}`} subtitle={taxi.organizationName} wide>
       <form onSubmit={handleSave} className="space-y-4">
-        <PhotoPicker value={photo} onChange={setPhoto} existingUrl={taxi.photoUrl} rounded="rounded-xl" />
+        <PhotoPicker value={photo} onChange={setPhoto} existingUrl={photoSrc(taxi.photoUrl)} rounded="rounded-xl" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label>Número de unidad</Label>
@@ -1313,6 +1336,95 @@ function TaxiChangeRequestsSection() {
                     Aprobar
                   </Button>
                 </div>
+              }
+            />
+          ))
+        )}
+      </Card>
+    </div>
+  )
+}
+
+/* ------------------------------- Reportes ---------------------------------- */
+
+const REPORT_CATEGORY_LABEL = {
+  COBRO_INCORRECTO: 'Cobro incorrecto',
+  SEGURIDAD: 'Seguridad',
+  MAL_TRATO: 'Mal trato',
+  OTRO: 'Otro',
+}
+
+const REPORT_ROLE_LABEL = {
+  PASSENGER: 'Pasajero',
+  DRIVER: 'Operador',
+}
+
+function TripReportsSection() {
+  const [reports, setReports] = useState([])
+  const [busyId, setBusyId] = useState(null)
+  const [error, setError] = useState('')
+  const { confirm, ConfirmDialogElement } = useConfirm()
+
+  const load = () => adminApi.listTripReports().then(({ data }) => setReports(data.data))
+  useEffect(() => {
+    load()
+  }, [])
+
+  const handleResolve = async (report) => {
+    const ok = await confirm({
+      title: 'Marcar reporte como resuelto',
+      message: `El reporte de ${report.reporterName} sobre el viaje #${report.tripId} se marcará como resuelto. ¿Continuar?`,
+      confirmLabel: 'Marcar resuelto',
+    })
+    if (!ok) return
+    setBusyId(report.id)
+    setError('')
+    try {
+      await adminApi.resolveTripReport(report.id)
+      load()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo resolver el reporte')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <ConfirmDialogElement />
+      <Card padded={false}>
+        <CardHeader
+          className="px-5 pt-5"
+          icon={AlertTriangle}
+          title="Reportes de viaje"
+          subtitle={`${reports.length} pendientes · un pasajero u operador los crea desde su viaje`}
+        />
+        {error && (
+          <div className="px-5 pb-3">
+            <AlertBox>{error}</AlertBox>
+          </div>
+        )}
+        {reports.length === 0 ? (
+          <div className="px-5 pb-5">
+            <EmptyState icon={AlertTriangle} title="Sin reportes pendientes" description="Aquí aparecerán cuando alguien reporte un problema en un viaje." />
+          </div>
+        ) : (
+          reports.map((r) => (
+            <ListRow
+              key={r.id}
+              avatar={
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                  <AlertTriangle className="h-4.5 w-4.5" />
+                </span>
+              }
+              title={`${REPORT_CATEGORY_LABEL[r.category] || r.category} · Viaje #${r.tripId}`}
+              subtitle={`${REPORT_ROLE_LABEL[r.reporterRole] || r.reporterRole} ${r.reporterName}${
+                r.otherPartyName ? ` sobre ${r.otherPartyName}` : ''
+              } · ${r.description}`}
+              right={
+                <Button variant="brand" size="sm" disabled={busyId !== null} loading={busyId === r.id} onClick={() => handleResolve(r)}>
+                  Marcar resuelto
+                </Button>
               }
             />
           ))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   Power,
@@ -26,12 +26,15 @@ import {
   Users,
   PawPrint,
   AlertTriangle,
+  Camera,
+  Loader2,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import MapView from '../components/map/MapView'
 import RatingForm from '../components/RatingForm'
 import RatingsModal from '../components/RatingsModal'
 import CancelTripModal from '../components/CancelTripModal'
+import ReportTripModal from '../components/ReportTripModal'
 import ChatPanel from '../components/ChatPanel'
 import DetailListModal from '../components/DetailListModal'
 import TripHistoryRow from '../components/TripHistoryRow'
@@ -50,7 +53,7 @@ import { useGeolocation } from '../hooks/useGeolocation'
 import { useSubscription } from '../hooks/useSubscription'
 import { useTripChat } from '../hooks/useTripChat'
 import * as driverApi from '../api/driver'
-import { cancelTrip } from '../api/trips'
+import { cancelTrip, reportTrip } from '../api/trips'
 
 const STATUS_COPY = {
   ACCEPTED: { label: 'Dirígete al origen', tone: 'success' },
@@ -62,18 +65,43 @@ const STATUS_COPY = {
 const MAP_HEIGHT = 'clamp(240px, 42dvh, 420px)'
 const API_URL = import.meta.env.VITE_API_URL || ''
 
-function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange }) {
+function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange, onUploadPhoto, uploadingPhoto, photoError }) {
+  const fileInputRef = useRef(null)
   if (!profile) return null
   return (
     <Card className="text-center lg:text-left">
       <div className="flex flex-col items-center gap-3 lg:items-start">
-        {profile.photoUrl ? (
-          <img src={`${API_URL}${profile.photoUrl}`} alt="" className="h-20 w-20 rounded-full object-cover" />
-        ) : (
-          <span className="flex h-20 w-20 items-center justify-center rounded-full bg-ink-900 text-2xl font-bold text-white">
-            {profile.name.charAt(0).toUpperCase()}
-          </span>
-        )}
+        <div className="relative">
+          {profile.photoUrl ? (
+            <img src={`${API_URL}${profile.photoUrl}`} alt="" className="h-20 w-20 rounded-full object-cover" />
+          ) : (
+            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-ink-900 text-2xl font-bold text-white">
+              {profile.name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingPhoto}
+            aria-label="Cambiar foto de perfil"
+            className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-ink-900 text-white shadow-sm hover:bg-ink-700 disabled:opacity-60"
+          >
+            {uploadingPhoto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="user"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) onUploadPhoto(file)
+              e.target.value = ''
+            }}
+          />
+        </div>
+        {photoError && <p className="text-[11px] text-red-600">{photoError}</p>}
         <div>
           <p className="text-base font-bold text-ink-900">{profile.name}</p>
           <button
@@ -162,6 +190,22 @@ export default function DriverHome() {
 
   const loadStats = () => driverApi.driverStats().then(({ data }) => setStats(data.data)).catch(() => {})
 
+  const [reportTripId, setReportTripId] = useState(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const handleUploadPhoto = async (file) => {
+    setUploadingPhoto(true)
+    setPhotoError('')
+    try {
+      const { data } = await driverApi.uploadPhoto(file)
+      setProfile((p) => (p ? { ...p, photoUrl: data.data } : p))
+    } catch (err) {
+      setPhotoError(err.response?.data?.message || 'No se pudo subir la foto')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
   const openRatings = () => {
     setRatingsOpen(true)
     setRatingsLoading(true)
@@ -198,7 +242,19 @@ export default function DriverHome() {
       .catch(() => setTrip(null))
     loadStats()
     const loadProfile = () => driverApi.myProfile().then(({ data }) => setProfile(data.data)).catch(() => {})
-    loadProfile()
+    // El backend es quien de verdad sabe si el operador seguia conectado (DriverLocation.online,
+    // ver GET /api/driver/me) - sin restaurarlo aqui, cualquier refresh de pagina arrancaria el
+    // estado local "online" en false aunque el backend lo siguiera considerando en linea, y el
+    // operador dejaria de recibir ofertas/ubicacion hasta tocar "Conectarme" de nuevo a mano. Solo
+    // se restaura aqui, una vez al montar - el polling de abajo ya no lo vuelve a tocar, para no
+    // pisar un "Conectarme" reciente mientras el primer ping todavia no llega al backend.
+    driverApi
+      .myProfile()
+      .then(({ data }) => {
+        setProfile(data.data)
+        setOnline(data.data.online)
+      })
+      .catch(() => {})
     // El pasajero puede calificar (y dejar propina) en cualquier momento despues de que el
     // operador ya vio sus estadisticas del dia - sin este polling, "Propinas hoy"/"Viajes hoy" y su
     // calificacion se quedarian desactualizados hasta cerrar sesion y volver a entrar.
@@ -300,14 +356,31 @@ export default function DriverHome() {
     await driverApi.rejectOffer(offer.tripId, offer.offerId).catch(() => {})
   }
 
+  const [tripActionBusy, setTripActionBusy] = useState(false)
   const handleStart = async () => {
-    const { data } = await driverApi.startTrip(trip.id)
-    setTrip(data.data)
+    setError('')
+    setTripActionBusy(true)
+    try {
+      const { data } = await driverApi.startTrip(trip.id)
+      setTrip(data.data)
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo iniciar el viaje')
+    } finally {
+      setTripActionBusy(false)
+    }
   }
 
   const handleComplete = async () => {
-    const { data } = await driverApi.completeTrip(trip.id)
-    setTrip(data.data)
+    setError('')
+    setTripActionBusy(true)
+    try {
+      const { data } = await driverApi.completeTrip(trip.id)
+      setTrip(data.data)
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo finalizar el viaje')
+    } finally {
+      setTripActionBusy(false)
+    }
   }
 
   const handleConfirmPayment = async () => {
@@ -351,7 +424,7 @@ export default function DriverHome() {
         <Button variant="danger" size="lg" icon={XCircle} onClick={() => setCancelOpen(true)}>
           Cancelar
         </Button>
-        <Button variant="brand" size="lg" icon={Navigation} onClick={handleStart}>
+        <Button variant="brand" size="lg" icon={Navigation} onClick={handleStart} loading={tripActionBusy} disabled={tripActionBusy}>
           Iniciar viaje
         </Button>
       </div>
@@ -362,7 +435,7 @@ export default function DriverHome() {
         <Button variant="danger" size="lg" icon={XCircle} onClick={() => setCancelOpen(true)}>
           Cancelar
         </Button>
-        <Button variant="success" size="lg" icon={CheckCircle2} onClick={handleComplete}>
+        <Button variant="success" size="lg" icon={CheckCircle2} onClick={handleComplete} loading={tripActionBusy} disabled={tripActionBusy}>
           Finalizar viaje
         </Button>
       </div>
@@ -382,13 +455,26 @@ export default function DriverHome() {
       bottomBar={bottomBar}
       sidebar={
         !activeTrip && !finishedTrip ? (
-          <ProfileSidebar profile={profile} currentTaxi={currentTaxi} onOpenRatings={openRatings} onOpenTaxiChange={() => setTaxiChangeOpen(true)} />
+          <ProfileSidebar
+            profile={profile}
+            currentTaxi={currentTaxi}
+            onOpenRatings={openRatings}
+            onOpenTaxiChange={() => setTaxiChangeOpen(true)}
+            onUploadPhoto={handleUploadPhoto}
+            uploadingPhoto={uploadingPhoto}
+            photoError={photoError}
+          />
         ) : null
       }
     >
       <ConfirmDialogElement />
       <RatingsModal open={ratingsOpen} onClose={() => setRatingsOpen(false)} ratings={ratings} loading={ratingsLoading} title="Tus calificaciones" />
       <CancelTripModal open={cancelOpen} onClose={() => setCancelOpen(false)} onConfirm={handleCancelTrip} busy={cancelBusy} />
+      <ReportTripModal
+        open={Boolean(reportTripId)}
+        onClose={() => setReportTripId(null)}
+        onSubmit={(data) => reportTrip(reportTripId, data)}
+      />
       <ChatPanel
         open={chatOpen}
         onClose={() => setChatOpen(false)}
@@ -405,7 +491,7 @@ export default function DriverHome() {
         title={historyModal?.title}
         loading={historyLoading}
         items={historyModal && tripHistory ? tripHistory.filter(historyModal.filterFn) : null}
-        renderItem={(t) => <TripHistoryRow trip={t} />}
+        renderItem={(t) => <TripHistoryRow trip={t} onReport={(trip) => setReportTripId(trip.id)} />}
         emptyMessage="No hay viajes que coincidan con esto todavía."
       />
       <Modal open={taxiChangeOpen} onClose={closeTaxiChangeModal} title="Solicitar cambio de taxi">
@@ -453,6 +539,90 @@ export default function DriverHome() {
         )}
       </Modal>
       <div className="space-y-5">
+        {!activeTrip && !finishedTrip && offers.length > 0 && (() => {
+          // Se muestra solo la mas urgente (la primera que llego expira primero, todas comparten
+          // la misma vigencia) con un contador de las demas, en vez de apilarlas todas - si se
+          // rechaza esta, la siguiente toma su lugar sola. Va primero en la pantalla (antes que
+          // bienvenida/estado/estadisticas) para que no se tenga que hacer scroll para verla.
+          const offer = offers[0]
+          return (
+            <Card className="relative overflow-hidden border-2 border-brand-500 bg-brand-50/40 animate-fade-in-up">
+              <div className="absolute inset-x-0 top-0 h-1 bg-brand-500" />
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge tone="brand">Nueva solicitud</Badge>
+                  {offer.wasScheduled && <Badge tone="info">Programado</Badge>}
+                  {offers.length > 1 && <Badge tone="neutral">+{offers.length - 1} más</Badge>}
+                </div>
+                <span className="text-sm font-bold text-ink-900">${offer.estimatedFare} MXN</span>
+              </div>
+              <div className="space-y-1.5 text-sm text-ink-700">
+                <p className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 shrink-0 text-emerald-600" /> {offer.originAddress}
+                </p>
+                <p className="flex items-center gap-2">
+                  <Flag className="h-4 w-4 shrink-0 text-red-500" /> {offer.destinationAddress}
+                </p>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500">
+                <span>{offer.distanceKm} km</span>
+                <span>&middot;</span>
+                <span className="flex items-center gap-1">
+                  {offer.paymentMethod === 'CASH' ? <Banknote className="h-3.5 w-3.5" /> : <CreditCard className="h-3.5 w-3.5" />}
+                  {offer.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}
+                </span>
+                <span>&middot;</span>
+                <span>a {offer.driverDistanceKm} km de ti</span>
+              </div>
+              {(offer.babySeat || offer.moreThanFourPassengers || offer.hasPet || offer.comments) && (
+                <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
+                  {offer.babySeat && (
+                    <p className="flex items-center gap-1.5">
+                      <Baby className="h-3.5 w-3.5 shrink-0" /> Silla de bebé
+                    </p>
+                  )}
+                  {offer.moreThanFourPassengers && (
+                    <p className="flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5 shrink-0" /> Más de 4 pasajeros
+                    </p>
+                  )}
+                  {offer.hasPet && (
+                    <p className="flex items-center gap-1.5">
+                      <PawPrint className="h-3.5 w-3.5 shrink-0" /> Lleva una mascota
+                    </p>
+                  )}
+                  {offer.comments && (
+                    <p className="flex items-start gap-1.5">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {offer.comments}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  size="md"
+                  icon={XCircle}
+                  disabled={busyOfferId !== null}
+                  onClick={() => handleRejectOffer(offer)}
+                >
+                  Rechazar
+                </Button>
+                <Button
+                  variant="brand"
+                  size="md"
+                  icon={CheckCircle2}
+                  loading={busyOfferId === offer.offerId}
+                  disabled={busyOfferId !== null && busyOfferId !== offer.offerId}
+                  onClick={() => handleAcceptOffer(offer)}
+                >
+                  Aceptar
+                </Button>
+              </div>
+            </Card>
+          )
+        })()}
+
         {!activeTrip && !finishedTrip && showWelcome && (
           <div className="relative animate-fade-in-up rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3.5 text-ink-800">
             <button onClick={() => setShowWelcome(false)} className="absolute right-3 top-3 text-ink-400 hover:text-ink-600">
@@ -555,90 +725,6 @@ export default function DriverHome() {
           <EmptyState illustration="waitingForRide" title="Esperando solicitudes..." description="Te avisaremos en cuanto haya un pasajero cerca de ti." />
         )}
 
-        {!activeTrip && !finishedTrip && offers.length > 0 && (
-          <div className="space-y-3">
-            {offers.length > 1 && (
-              <p className="text-xs font-semibold text-ink-600">
-                {offers.length} solicitudes disponibles — elige la que prefieras:
-              </p>
-            )}
-            {offers.map((offer) => (
-              <Card key={offer.offerId} className="animate-fade-in-up border-2 border-brand-500 bg-brand-50/40">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Badge tone="brand">Nueva solicitud</Badge>
-                    {offer.wasScheduled && <Badge tone="info">Programado</Badge>}
-                  </div>
-                  <span className="text-sm font-bold text-ink-900">${offer.estimatedFare} MXN</span>
-                </div>
-                <div className="space-y-1.5 text-sm text-ink-700">
-                  <p className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 shrink-0 text-emerald-600" /> {offer.originAddress}
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <Flag className="h-4 w-4 shrink-0 text-red-500" /> {offer.destinationAddress}
-                  </p>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500">
-                  <span>{offer.distanceKm} km</span>
-                  <span>&middot;</span>
-                  <span className="flex items-center gap-1">
-                    {offer.paymentMethod === 'CASH' ? <Banknote className="h-3.5 w-3.5" /> : <CreditCard className="h-3.5 w-3.5" />}
-                    {offer.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}
-                  </span>
-                  <span>&middot;</span>
-                  <span>a {offer.driverDistanceKm} km de ti</span>
-                </div>
-                {(offer.babySeat || offer.moreThanFourPassengers || offer.hasPet || offer.comments) && (
-                  <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
-                    {offer.babySeat && (
-                      <p className="flex items-center gap-1.5">
-                        <Baby className="h-3.5 w-3.5 shrink-0" /> Silla de bebé
-                      </p>
-                    )}
-                    {offer.moreThanFourPassengers && (
-                      <p className="flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5 shrink-0" /> Más de 4 pasajeros
-                      </p>
-                    )}
-                    {offer.hasPet && (
-                      <p className="flex items-center gap-1.5">
-                        <PawPrint className="h-3.5 w-3.5 shrink-0" /> Lleva una mascota
-                      </p>
-                    )}
-                    {offer.comments && (
-                      <p className="flex items-start gap-1.5">
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {offer.comments}
-                      </p>
-                    )}
-                  </div>
-                )}
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    size="md"
-                    icon={XCircle}
-                    disabled={busyOfferId !== null}
-                    onClick={() => handleRejectOffer(offer)}
-                  >
-                    Rechazar
-                  </Button>
-                  <Button
-                    variant="brand"
-                    size="md"
-                    icon={CheckCircle2}
-                    loading={busyOfferId === offer.offerId}
-                    disabled={busyOfferId !== null && busyOfferId !== offer.offerId}
-                    onClick={() => handleAcceptOffer(offer)}
-                  >
-                    Aceptar
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-
         {activeTrip && (
           <>
             <MapView
@@ -727,6 +813,14 @@ export default function DriverHome() {
                   )}
                 </div>
               )}
+              <button
+                type="button"
+                onClick={() => setReportTripId(activeTrip.id)}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Reportar un problema
+              </button>
             </Card>
           </>
         )}
