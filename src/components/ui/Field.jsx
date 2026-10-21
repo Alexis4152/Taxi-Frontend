@@ -7,16 +7,17 @@ export function Label({ children, hint }) {
   )
 }
 
-export function Input({ icon: Icon, className = '', ...props }) {
+export function Input({ icon: Icon, endAdornment, className = '', ...props }) {
   return (
     <div className="relative">
       {Icon && <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />}
       <input
         className={`w-full rounded-xl border border-ink-200 bg-white py-2.5 text-base text-ink-900 placeholder:text-ink-400 transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 ${
-          Icon ? 'pl-10 pr-3' : 'px-3'
-        } ${className}`}
+          Icon ? 'pl-10' : 'pl-3'
+        } ${endAdornment ? 'pr-10' : 'pr-3'} ${className}`}
         {...props}
       />
+      {endAdornment && <div className="absolute right-3 top-1/2 -translate-y-1/2">{endAdornment}</div>}
     </div>
   )
 }

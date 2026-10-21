@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Phone, Lock, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Phone, Lock, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import BrandPanel from '../components/ui/BrandPanel'
 import Logo from '../components/ui/Logo'
@@ -21,6 +21,7 @@ export default function LoginPage() {
 
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -78,7 +79,24 @@ export default function LoginPage() {
                   ¿Olvidaste tu contraseña?
                 </Link>
               </div>
-              <Input icon={Lock} type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Input
+                icon={Lock}
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                endAdornment={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="text-ink-400 hover:text-ink-600"
+                    tabIndex={-1}
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                }
+              />
             </div>
 
             {location.state?.registered && (

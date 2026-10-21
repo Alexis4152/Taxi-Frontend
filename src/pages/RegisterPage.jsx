@@ -5,11 +5,12 @@ import { useAuth } from '../context/AuthContext'
 import BrandPanel from '../components/ui/BrandPanel'
 import Logo from '../components/ui/Logo'
 import PhotoPicker from '../components/ui/PhotoPicker'
-import { Label, Input } from '../components/ui/Field'
+import { Label, Input, Select } from '../components/ui/Field'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import * as passengerApi from '../api/passenger'
 import * as driverApi from '../api/driver'
+import { VEHICLE_CATALOG, OTHER_OPTION, modelsForBrand } from '../data/vehicleCatalog'
 
 const emptyForm = {
   name: '',
@@ -28,6 +29,8 @@ export default function RegisterPage() {
 
   const [role, setRole] = useState('PASSENGER')
   const [form, setForm] = useState(emptyForm)
+  const [brandChoice, setBrandChoice] = useState('')
+  const [modelChoice, setModelChoice] = useState('')
   const [photo, setPhoto] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -35,6 +38,19 @@ export default function RegisterPage() {
   const [termsOpen, setTermsOpen] = useState(false)
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+
+  const selectBrand = (e) => {
+    const value = e.target.value
+    setBrandChoice(value)
+    setModelChoice('')
+    setForm((f) => ({ ...f, taxiBrand: value === OTHER_OPTION ? '' : value, taxiModel: '' }))
+  }
+
+  const selectModel = (e) => {
+    const value = e.target.value
+    setModelChoice(value)
+    setForm((f) => ({ ...f, taxiModel: value === OTHER_OPTION ? '' : value }))
+  }
 
   const updatePhone = (e) => {
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10)
@@ -179,15 +195,63 @@ export default function RegisterPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Marca</Label>
-                    <Input required value={form.taxiBrand} onChange={update('taxiBrand')} placeholder="Nissan" />
+                    <Select required value={brandChoice} onChange={selectBrand}>
+                      <option value="" disabled>
+                        Selecciona una marca
+                      </option>
+                      {VEHICLE_CATALOG.map((b) => (
+                        <option key={b.brand} value={b.brand}>
+                          {b.brand}
+                        </option>
+                      ))}
+                      <option value={OTHER_OPTION}>Otra marca</option>
+                    </Select>
                   </div>
                   <div>
                     <Label>Modelo</Label>
-                    <Input required value={form.taxiModel} onChange={update('taxiModel')} placeholder="Versa" />
+                    {brandChoice && brandChoice !== OTHER_OPTION ? (
+                      <Select required value={modelChoice} onChange={selectModel}>
+                        <option value="" disabled>
+                          Selecciona un modelo
+                        </option>
+                        {modelsForBrand(brandChoice).map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                        <option value={OTHER_OPTION}>Otro modelo</option>
+                      </Select>
+                    ) : (
+                      <Input
+                        required
+                        disabled={!brandChoice}
+                        value={form.taxiModel}
+                        onChange={update('taxiModel')}
+                        placeholder={brandChoice ? 'Modelo' : 'Primero elige una marca'}
+                      />
+                    )}
                   </div>
                 </div>
+                {brandChoice === OTHER_OPTION && (
+                  <Input
+                    required
+                    value={form.taxiBrand}
+                    onChange={update('taxiBrand')}
+                    placeholder="Escribe la marca de tu auto"
+                  />
+                )}
+                {modelChoice === OTHER_OPTION && brandChoice !== OTHER_OPTION && (
+                  <Input
+                    required
+                    value={form.taxiModel}
+                    onChange={update('taxiModel')}
+                    placeholder="Escribe el modelo de tu auto"
+                  />
+                )}
                 <p className="text-[11px] text-ink-400">
-                  Si otro operador ya registró este taxi, quedarás vinculado a esa misma unidad (varios operadores pueden compartir un taxi).
+                  Solo se aceptan sedanes, compactos y hatchbacks (sin pickups, SUVs ni deportivos). Si
+                  otro operador ya registró este taxi, quedarás vinculado a esa misma unidad (varios
+                  operadores pueden compartir un taxi).
                 </p>
               </div>
             )}
