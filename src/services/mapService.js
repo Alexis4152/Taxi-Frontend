@@ -1,5 +1,5 @@
 import { Map as MapLibreMap, Marker, NavigationControl, LngLatBounds, setWorkerUrl } from 'maplibre-gl'
-import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { MAP_STYLE_URL } from '../config'
 
 // Unico punto de la app que conoce MapLibre. Componentes de UI nunca importan 'maplibre-gl'
@@ -10,10 +10,15 @@ import { MAP_STYLE_URL } from '../config'
 // `import.meta.url` en tiempo de ejecucion, construyendola con un template string en vez de la
 // forma estatica `new Worker(new URL(..., import.meta.url))`. Ni Vite ni Rollup detectan ese
 // patron dinamico, asi que nunca copian/sirven ese archivo del worker donde MapLibre lo espera:
-// el worker nunca carga (404 silencioso, sin ningun error visible en el mapa) y el mapa se queda
-// solo con el color de fondo del estilo, sin calles/edificios/agua. `?url` hace que Vite si
-// resuelva y empaquete ese archivo como asset (en dev y en build), y setWorkerUrl le dice a
-// MapLibre que lo use ahi en vez de intentar adivinar la ruta.
+// el worker nunca carga y el mapa se queda solo con el color de fondo del estilo, sin
+// calles/edificios/agua. El sufijo `?worker&url` (soporte nativo de Vite para Web Workers) hace
+// que Vite trate este archivo como punto de entrada de un worker: lo empaqueta completo,
+// resolviendo e insertando adentro sus propios imports internos (maplibre-gl-worker.mjs importa
+// de un archivo hermano, maplibre-gl-shared.mjs) en un solo chunk autocontenido. Usar solo `?url`
+// (sin "worker") copia nada mas ese archivo tal cual, sin su hermano - funciona en el servidor de
+// desarrollo de Vite (que sirve directo desde node_modules, donde el hermano si esta al lado),
+// pero truena en cualquier build de produccion con un 404 silencioso al pedir ese import relativo
+// (confirmado reproduciendolo con un build real, no solo con npm run dev).
 setWorkerUrl(maplibreWorkerUrl)
 
 const ROUTE_SOURCE_ID = 'route'

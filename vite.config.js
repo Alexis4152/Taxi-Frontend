@@ -26,4 +26,15 @@ export default defineConfig({
       '/uploads': { target: 'http://localhost:8081', changeOrigin: true },
     },
   },
+  // "npm run preview" sirve el build de produccion (dist/) tal cual quedaria en el servidor real
+  // - a diferencia de "npm run dev", aqui es donde se agarran bugs que solo existen en el build
+  // (como el del worker de MapLibre). Mismo proxy que arriba, porque preview no hereda el de dev.
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': { target: 'http://localhost:8081', changeOrigin: true },
+      '/ws': { target: 'http://localhost:8081', changeOrigin: true, ws: true },
+      '/uploads': { target: 'http://localhost:8081', changeOrigin: true },
+    },
+  },
 })

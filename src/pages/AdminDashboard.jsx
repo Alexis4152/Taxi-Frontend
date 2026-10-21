@@ -23,6 +23,7 @@ import {
   ClipboardList,
   UserRound,
   AlertTriangle,
+  SlidersHorizontal,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import Card, { CardHeader } from '../components/ui/Card'
@@ -53,8 +54,9 @@ const NAV_SUPER_ADMIN = [
   { key: 'tarifas', label: 'Tarifas', icon: Banknote },
   { key: 'usuarios', label: 'Usuarios', icon: UserRound },
   { key: 'mapa', label: 'Mapa en vivo', icon: MapPinned },
+  { key: 'configuracion', label: 'Configuración', icon: SlidersHorizontal },
 ]
-const NAV_ADMIN = NAV_SUPER_ADMIN.filter((t) => !['organizaciones', 'mapa', 'usuarios'].includes(t.key))
+const NAV_ADMIN = NAV_SUPER_ADMIN.filter((t) => !['organizaciones', 'mapa', 'usuarios', 'configuracion'].includes(t.key))
 
 export default function AdminDashboard() {
   const { user } = useAuth()
@@ -103,7 +105,7 @@ export default function AdminDashboard() {
     </nav>
   )
 
-  const needsOrgPicker = isSuperAdmin && !['organizaciones', 'mapa', 'usuarios', 'solicitudes', 'reportes'].includes(tab)
+  const needsOrgPicker = isSuperAdmin && !['organizaciones', 'mapa', 'usuarios', 'solicitudes', 'reportes', 'configuracion'].includes(tab)
 
   return (
     <Layout title="Panel de administración" subtitle={isSuperAdmin ? 'Vista global de la plataforma' : user.organizationName} wide sidebar={sidebar}>
@@ -126,6 +128,7 @@ export default function AdminDashboard() {
       {tab === 'taxis' && <TaxisSection orgId={orgId} isSuperAdmin={isSuperAdmin} />}
       {tab === 'solicitudes' && <TaxiChangeRequestsSection />}
       {tab === 'reportes' && <TripReportsSection />}
+      {tab === 'configuracion' && isSuperAdmin && <PlatformSettingsSection />}
       {tab === 'tarifas' && <TariffsSection orgId={orgId} isSuperAdmin={isSuperAdmin} organizations={organizations} />}
       {tab === 'usuarios' && isSuperAdmin && <UsersSection />}
       {tab === 'mapa' && <LiveMapSection />}
@@ -1428,6 +1431,75 @@ function TripReportsSection() {
               }
             />
           ))
+        )}
+      </Card>
+    </div>
+  )
+}
+
+/* ----------------------------- Configuracion -------------------------------- */
+
+function PlatformSettingsSection() {
+  const [radius, setRadius] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    adminApi
+      .getPlatformSettings()
+      .then(({ data }) => setRadius(String(data.data.tripGeofenceRadiusMeters)))
+      .catch(() => setError('No se pudo cargar la configuración'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    setMessage('')
+    try {
+      const { data } = await adminApi.updatePlatformSettings({ tripGeofenceRadiusMeters: Number(radius) })
+      setRadius(String(data.data.tripGeofenceRadiusMeters))
+      setMessage(data.message || 'Configuración actualizada')
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo guardar la configuración')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader
+          icon={SlidersHorizontal}
+          title="Radio para iniciar/finalizar viaje"
+          subtitle="Que tan cerca debe estar el operador del punto de recogida (para iniciar) o del destino (para finalizar)"
+        />
+        {loading ? (
+          <p className="text-sm text-ink-400">Cargando...</p>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-3">
+            <div>
+              <Label hint="metros">Radio permitido</Label>
+              <Input
+                type="number"
+                min={10}
+                max={2000}
+                required
+                value={radius}
+                onChange={(e) => setRadius(e.target.value)}
+              />
+              <p className="mt-1.5 text-[11px] text-ink-400">Entre 10 y 2000 metros. Aplica a todas las organizaciones.</p>
+            </div>
+            {error && <AlertBox>{error}</AlertBox>}
+            {message && <AlertBox tone="success">{message}</AlertBox>}
+            <Button type="submit" variant="brand" loading={saving} className="w-full">
+              Guardar
+            </Button>
+          </form>
         )}
       </Card>
     </div>

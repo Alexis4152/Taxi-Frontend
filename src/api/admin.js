@@ -13,6 +13,10 @@ export const uploadOrganizationLogo = (id, file) => {
   return api.post(`/api/admin/organizations/${id}/logo`, form)
 }
 
+// Configuracion de la plataforma (solo SUPER_ADMIN)
+export const getPlatformSettings = () => api.get('/api/admin/platform-settings')
+export const updatePlatformSettings = (data) => api.put('/api/admin/platform-settings', data)
+
 // Operadores
 export const listDrivers = () => api.get('/api/admin/drivers')
 export const getDriver = (id) => api.get(`/api/admin/drivers/${id}`)
