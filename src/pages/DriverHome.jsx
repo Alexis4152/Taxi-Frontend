@@ -39,6 +39,7 @@ import ChatPanel from '../components/ChatPanel'
 import DetailListModal from '../components/DetailListModal'
 import TripHistoryRow from '../components/TripHistoryRow'
 import TripStatusStepper from '../components/TripStatusStepper'
+import ReferralCard from '../components/ReferralCard'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -52,6 +53,8 @@ import { useAuth } from '../context/AuthContext'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { useSubscription } from '../hooks/useSubscription'
 import { useTripChat } from '../hooks/useTripChat'
+import { useBrowserNotifications } from '../hooks/useBrowserNotifications'
+import NotificationPermissionBanner from '../components/NotificationPermissionBanner'
 import * as driverApi from '../api/driver'
 import { cancelTrip, reportTrip } from '../api/trips'
 
@@ -143,6 +146,7 @@ export default function DriverHome() {
   const location = useLocation()
   const [online, setOnline] = useState(false)
   const { position, error: geoError } = useGeolocation(online)
+  const { permission: notifPermission, requestPermission: requestNotifPermission, notify } = useBrowserNotifications()
   const [trip, setTrip] = useState(undefined)
   const [offers, setOffers] = useState([])
   const [busyOfferId, setBusyOfferId] = useState(null)
@@ -188,7 +192,8 @@ export default function DriverHome() {
     setTaxiChangeForm({ unitNumber: '', plates: '', brand: '', model: '', reason: '' })
   }
 
-  const loadStats = () => driverApi.driverStats().then(({ data }) => setStats(data.data)).catch(() => {})
+  const [statsPeriod, setStatsPeriod] = useState('TODAY')
+  const loadStats = (period = statsPeriod) => driverApi.driverStats(period).then(({ data }) => setStats(data.data)).catch(() => {})
 
   const [reportTripId, setReportTripId] = useState(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -213,6 +218,20 @@ export default function DriverHome() {
   }
 
   const isToday = (dateStr) => Boolean(dateStr) && new Date(dateStr).toDateString() === new Date().toDateString()
+
+  // Lunes 00:00 de la semana en curso, igual que el calculo del backend (ver
+  // DriverPortalController.stats) - para que los modales de detalle coincidan con lo que cuentan
+  // las tarjetas cuando se ve "Esta semana".
+  const isThisWeek = (dateStr) => {
+    if (!dateStr) return false
+    const date = new Date(dateStr)
+    const now = new Date()
+    const day = (now.getDay() + 6) % 7 // 0 = lunes
+    const startOfWeek = new Date(now)
+    startOfWeek.setHours(0, 0, 0, 0)
+    startOfWeek.setDate(now.getDate() - day)
+    return date >= startOfWeek
+  }
 
   const openStatModal = (title, filterFn) => {
     setHistoryModal({ title, filterFn })
@@ -303,7 +322,11 @@ export default function DriverHome() {
         setOffers((current) => current.filter((o) => o.offerId !== payload.offerId))
         return
       }
-      setOffers((current) => (current.some((o) => o.offerId === payload.offerId) ? current : [...current, payload]))
+      setOffers((current) => {
+        if (current.some((o) => o.offerId === payload.offerId)) return current
+        notify('Nueva solicitud de viaje', { body: `${payload.originAddress} · $${payload.estimatedFare} MXN` })
+        return [...current, payload]
+      })
     },
     Boolean(user?.driverId) && online && !trip
   )
@@ -357,14 +380,23 @@ export default function DriverHome() {
   }
 
   const [tripActionBusy, setTripActionBusy] = useState(false)
-  const handleStart = async () => {
+  const [startCodeOpen, setStartCodeOpen] = useState(false)
+  const [startCode, setStartCode] = useState('')
+  const [startCodeError, setStartCodeError] = useState('')
+
+  const handleStart = async (verificationCode) => {
     setError('')
+    setStartCodeError('')
     setTripActionBusy(true)
     try {
-      const { data } = await driverApi.startTrip(trip.id)
+      const { data } = await driverApi.startTrip(trip.id, verificationCode)
       setTrip(data.data)
+      setStartCodeOpen(false)
+      setStartCode('')
     } catch (err) {
-      setError(err.response?.data?.message || 'No se pudo iniciar el viaje')
+      const message = err.response?.data?.message || 'No se pudo iniciar el viaje'
+      if (startCodeOpen) setStartCodeError(message)
+      else setError(message)
     } finally {
       setTripActionBusy(false)
     }
@@ -424,7 +456,7 @@ export default function DriverHome() {
         <Button variant="danger" size="lg" icon={XCircle} onClick={() => setCancelOpen(true)}>
           Cancelar
         </Button>
-        <Button variant="brand" size="lg" icon={Navigation} onClick={handleStart} loading={tripActionBusy} disabled={tripActionBusy}>
+        <Button variant="brand" size="lg" icon={Navigation} onClick={() => setStartCodeOpen(true)} loading={tripActionBusy} disabled={tripActionBusy}>
           Iniciar viaje
         </Button>
       </div>
@@ -455,15 +487,18 @@ export default function DriverHome() {
       bottomBar={bottomBar}
       sidebar={
         !activeTrip && !finishedTrip ? (
-          <ProfileSidebar
-            profile={profile}
-            currentTaxi={currentTaxi}
-            onOpenRatings={openRatings}
-            onOpenTaxiChange={() => setTaxiChangeOpen(true)}
-            onUploadPhoto={handleUploadPhoto}
-            uploadingPhoto={uploadingPhoto}
-            photoError={photoError}
-          />
+          <div className="space-y-4">
+            <ProfileSidebar
+              profile={profile}
+              currentTaxi={currentTaxi}
+              onOpenRatings={openRatings}
+              onOpenTaxiChange={() => setTaxiChangeOpen(true)}
+              onUploadPhoto={handleUploadPhoto}
+              uploadingPhoto={uploadingPhoto}
+              photoError={photoError}
+            />
+            <ReferralCard />
+          </div>
         ) : null
       }
     >
@@ -475,6 +510,38 @@ export default function DriverHome() {
         onClose={() => setReportTripId(null)}
         onSubmit={(data) => reportTrip(reportTripId, data)}
       />
+      <Modal
+        open={startCodeOpen}
+        onClose={() => {
+          setStartCodeOpen(false)
+          setStartCode('')
+          setStartCodeError('')
+        }}
+        title="Confirma el código del pasajero"
+      >
+        <p className="mb-3 text-xs text-ink-500">Pídele al pasajero el código de 4 dígitos que le mostramos y captúralo aquí antes de iniciar el viaje.</p>
+        <Input
+          autoFocus
+          inputMode="numeric"
+          maxLength={4}
+          value={startCode}
+          onChange={(e) => setStartCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          placeholder="0000"
+          className="text-center text-xl tracking-[0.5em]"
+        />
+        {startCodeError && <p className="mt-2 text-xs text-red-600">{startCodeError}</p>}
+        <Button
+          variant="brand"
+          size="lg"
+          icon={Navigation}
+          className="mt-4 w-full"
+          loading={tripActionBusy}
+          disabled={tripActionBusy || startCode.length !== 4}
+          onClick={() => handleStart(startCode)}
+        >
+          Iniciar viaje
+        </Button>
+      </Modal>
       <ChatPanel
         open={chatOpen}
         onClose={() => setChatOpen(false)}
@@ -539,6 +606,7 @@ export default function DriverHome() {
         )}
       </Modal>
       <div className="space-y-5">
+        <NotificationPermissionBanner permission={notifPermission} onRequest={requestNotifPermission} />
         {!activeTrip && !finishedTrip && offers.length > 0 && (() => {
           // Se muestra solo la mas urgente (la primera que llego expira primero, todas comparten
           // la misma vigencia) con un contador de las demas, en vez de apilarlas todas - si se
@@ -661,42 +729,73 @@ export default function DriverHome() {
         )}
 
         {!activeTrip && !finishedTrip && stats && (
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard
-              icon={ListChecks}
-              label="Viajes hoy"
-              value={stats.tripsCompletedToday}
-              tone="brand"
-              onClick={() => openStatModal('Viajes completados hoy', (t) => t.status === 'COMPLETED' && isToday(t.completedAt))}
-            />
-            <StatCard
-              icon={Wallet}
-              label="Ganado hoy"
-              value={`$${stats.earningsToday}`}
-              tone="success"
-              onClick={() => openStatModal('Viajes completados hoy', (t) => t.status === 'COMPLETED' && isToday(t.completedAt))}
-            />
-            <StatCard
-              icon={ThumbsUp}
-              label="Aceptados hoy"
-              value={stats.tripsAcceptedToday}
-              onClick={() => openStatModal('Viajes aceptados hoy', (t) => isToday(t.acceptedAt))}
-            />
-            <StatCard
-              icon={UserX}
-              label="Cancelados por pasajero"
-              value={stats.tripsCancelledByPassengerToday}
-              onClick={() =>
-                openStatModal('Cancelados por el pasajero hoy', (t) => t.status === 'CANCELLED' && t.cancelledByRole === 'PASSENGER' && isToday(t.cancelledAt))
-              }
-            />
-            <StatCard
-              icon={Gift}
-              label="Propinas hoy"
-              value={`$${stats.tipsToday}`}
-              tone="success"
-              onClick={() => openStatModal('Viajes completados hoy', (t) => t.status === 'COMPLETED' && isToday(t.completedAt))}
-            />
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: 'TODAY', label: 'Hoy' },
+                { value: 'WEEK', label: 'Esta semana' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    setStatsPeriod(opt.value)
+                    loadStats(opt.value)
+                  }}
+                  className={`flex min-h-9 items-center justify-center rounded-xl border-2 text-xs font-semibold transition ${
+                    statsPeriod === opt.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {(() => {
+              const periodLabel = statsPeriod === 'WEEK' ? 'esta semana' : 'hoy'
+              const inPeriod = statsPeriod === 'WEEK' ? isThisWeek : isToday
+              return (
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard
+                    icon={ListChecks}
+                    label={`Viajes ${periodLabel}`}
+                    value={stats.tripsCompletedToday}
+                    tone="brand"
+                    onClick={() => openStatModal(`Viajes completados ${periodLabel}`, (t) => t.status === 'COMPLETED' && inPeriod(t.completedAt))}
+                  />
+                  <StatCard
+                    icon={Wallet}
+                    label={`Ganado ${periodLabel}`}
+                    value={`$${stats.earningsToday}`}
+                    tone="success"
+                    onClick={() => openStatModal(`Viajes completados ${periodLabel}`, (t) => t.status === 'COMPLETED' && inPeriod(t.completedAt))}
+                  />
+                  <StatCard
+                    icon={ThumbsUp}
+                    label={`Aceptados ${periodLabel}`}
+                    value={stats.tripsAcceptedToday}
+                    onClick={() => openStatModal(`Viajes aceptados ${periodLabel}`, (t) => inPeriod(t.acceptedAt))}
+                  />
+                  <StatCard
+                    icon={UserX}
+                    label="Cancelados por pasajero"
+                    value={stats.tripsCancelledByPassengerToday}
+                    onClick={() =>
+                      openStatModal(
+                        `Cancelados por el pasajero ${periodLabel}`,
+                        (t) => t.status === 'CANCELLED' && t.cancelledByRole === 'PASSENGER' && inPeriod(t.cancelledAt)
+                      )
+                    }
+                  />
+                  <StatCard
+                    icon={Gift}
+                    label={`Propinas ${periodLabel}`}
+                    value={`$${stats.tipsToday}`}
+                    tone="success"
+                    onClick={() => openStatModal(`Viajes completados ${periodLabel}`, (t) => t.status === 'COMPLETED' && inPeriod(t.completedAt))}
+                  />
+                </div>
+              )
+            })()}
           </div>
         )}
 

@@ -10,4 +10,5 @@ export const nearbyDrivers = (lat, lng) => api.get('/api/trips/nearby-drivers', 
 export const getTripMessages = (id) => api.get(`/api/trips/${id}/messages`)
 export const sendTripMessage = (id, body) => api.post(`/api/trips/${id}/messages`, { body })
 export const reportTrip = (id, data) => api.post(`/api/trips/${id}/reports`, data)
+export const getVerificationCode = (id) => api.get(`/api/trips/${id}/verification-code`)
 export const getPublicTrip = (shareToken) => api.get(`/api/public/trips/${shareToken}`)

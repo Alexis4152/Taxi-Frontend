@@ -24,6 +24,8 @@ import {
   UserRound,
   AlertTriangle,
   SlidersHorizontal,
+  Gift,
+  UserPlus,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import Card, { CardHeader } from '../components/ui/Card'
@@ -32,11 +34,12 @@ import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
+import Switch from '../components/ui/Switch'
 import RatingsModal from '../components/RatingsModal'
 import DetailListModal from '../components/DetailListModal'
 import PhotoPicker from '../components/ui/PhotoPicker'
 import { useConfirm } from '../components/ui/ConfirmDialog'
-import { Label, Input, Select } from '../components/ui/Field'
+import { Label, Input, Select, Textarea } from '../components/ui/Field'
 import { useAuth } from '../context/AuthContext'
 import MapView from '../components/map/MapView'
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, LIVE_MAP_POLL_MS } from '../config'
@@ -980,7 +983,7 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
 
 function TaxisSection({ orgId, isSuperAdmin }) {
   const [allTaxis, setAllTaxis] = useState([])
-  const [form, setForm] = useState({ unitNumber: '', plates: '', brand: '', model: '' })
+  const [form, setForm] = useState({ unitNumber: '', plates: '', brand: '', model: '', wheelchairAccessible: false })
   const [showCreate, setShowCreate] = useState(false)
   const [photo, setPhoto] = useState(null)
   const [error, setError] = useState('')
@@ -1027,7 +1030,7 @@ function TaxisSection({ orgId, isSuperAdmin }) {
     try {
       const { data } = await adminApi.createTaxi({ ...form, organizationId: orgId || undefined })
       if (photo) await adminApi.uploadTaxiPhoto(data.data.id, photo).catch(() => {})
-      setForm({ unitNumber: '', plates: '', brand: '', model: '' })
+      setForm({ unitNumber: '', plates: '', brand: '', model: '', wheelchairAccessible: false })
       setPhoto(null)
       setShowCreate(false)
       load()
@@ -1074,7 +1077,10 @@ function TaxisSection({ orgId, isSuperAdmin }) {
             <Avatar url={t.photoUrl} icon={Car} rounded="rounded-xl" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-ink-900">Unidad {t.unitNumber}</p>
-              <p className="truncate text-xs text-ink-500">{t.plates}</p>
+              <p className="truncate text-xs text-ink-500">
+                {t.plates}
+                {isSuperAdmin && !orgId && t.organizationName && ` · ${t.organizationName}`}
+              </p>
             </div>
             <Badge tone={t.active ? 'success' : 'neutral'}>{t.active ? 'Activo' : 'Baja'}</Badge>
           </button>
@@ -1119,6 +1125,11 @@ function TaxisSection({ orgId, isSuperAdmin }) {
               <Input value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} placeholder="Versa" />
             </div>
           </div>
+          <Switch
+            label="Accesible para silla de ruedas"
+            checked={form.wheelchairAccessible}
+            onChange={(v) => setForm((f) => ({ ...f, wheelchairAccessible: v }))}
+          />
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => setShowCreate(false)} className="flex-1">
               Cancelar
@@ -1158,6 +1169,7 @@ function TaxisSection({ orgId, isSuperAdmin }) {
                 subtitle={
                   <>
                     {t.brand || t.model ? `${t.plates} · ${[t.brand, t.model].filter(Boolean).join(' ')}` : t.plates}
+                    {isSuperAdmin && !orgId && t.organizationName && ` · ${t.organizationName}`}
                     <br />
                     <span className={taxiDrivers.length === 0 ? 'text-ink-400' : ''}>{operatorsLabel}</span>
                   </>
@@ -1183,7 +1195,13 @@ function TaxiDetailModal({ taxiId, onClose, onSaved }) {
   useEffect(() => {
     adminApi.getTaxi(taxiId).then(({ data }) => {
       setTaxi(data.data)
-      setForm({ unitNumber: data.data.unitNumber, plates: data.data.plates, brand: data.data.brand || '', model: data.data.model || '' })
+      setForm({
+        unitNumber: data.data.unitNumber,
+        plates: data.data.plates,
+        brand: data.data.brand || '',
+        model: data.data.model || '',
+        wheelchairAccessible: data.data.wheelchairAccessible || false,
+      })
     })
     adminApi.listDrivers().then(({ data }) => setDrivers(data.data.filter((d) => d.taxiId === taxiId)))
   }, [taxiId])
@@ -1234,6 +1252,11 @@ function TaxiDetailModal({ taxiId, onClose, onSaved }) {
             <Input value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} placeholder="Versa" />
           </div>
         </div>
+        <Switch
+          label="Accesible para silla de ruedas"
+          checked={form.wheelchairAccessible}
+          onChange={(v) => setForm((f) => ({ ...f, wheelchairAccessible: v }))}
+        />
         {error && <AlertBox>{error}</AlertBox>}
         <Button type="submit" variant="brand" icon={Pencil} loading={saving} className="w-full">
           Guardar cambios
@@ -1441,17 +1464,25 @@ function TripReportsSection() {
 
 function PlatformSettingsSection() {
   const [radius, setRadius] = useState('')
+  const [searchRadiusKm, setSearchRadiusKm] = useState('')
+  const [rewardDescription, setRewardDescription] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [referrals, setReferrals] = useState(null)
 
   useEffect(() => {
     adminApi
       .getPlatformSettings()
-      .then(({ data }) => setRadius(String(data.data.tripGeofenceRadiusMeters)))
+      .then(({ data }) => {
+        setRadius(String(data.data.tripGeofenceRadiusMeters))
+        setSearchRadiusKm(String(data.data.dispatchSearchRadiusKm))
+        setRewardDescription(data.data.referralRewardDescription || '')
+      })
       .catch(() => setError('No se pudo cargar la configuración'))
       .finally(() => setLoading(false))
+    adminApi.listReferrals().then(({ data }) => setReferrals(data.data)).catch(() => {})
   }, [])
 
   const handleSave = async (e) => {
@@ -1460,8 +1491,14 @@ function PlatformSettingsSection() {
     setError('')
     setMessage('')
     try {
-      const { data } = await adminApi.updatePlatformSettings({ tripGeofenceRadiusMeters: Number(radius) })
+      const { data } = await adminApi.updatePlatformSettings({
+        tripGeofenceRadiusMeters: Number(radius),
+        dispatchSearchRadiusKm: Number(searchRadiusKm),
+        referralRewardDescription: rewardDescription || null,
+      })
       setRadius(String(data.data.tripGeofenceRadiusMeters))
+      setSearchRadiusKm(String(data.data.dispatchSearchRadiusKm))
+      setRewardDescription(data.data.referralRewardDescription || '')
       setMessage(data.message || 'Configuración actualizada')
     } catch (err) {
       setError(err.response?.data?.message || 'No se pudo guardar la configuración')
@@ -1475,15 +1512,15 @@ function PlatformSettingsSection() {
       <Card>
         <CardHeader
           icon={SlidersHorizontal}
-          title="Radio para iniciar/finalizar viaje"
-          subtitle="Que tan cerca debe estar el operador del punto de recogida (para iniciar) o del destino (para finalizar)"
+          title="Radios de operación"
+          subtitle="Que tan cerca debe estar el operador del punto de recogida/destino, y hasta donde se le ofrecen viajes"
         />
         {loading ? (
           <p className="text-sm text-ink-400">Cargando...</p>
         ) : (
           <form onSubmit={handleSave} className="space-y-3">
             <div>
-              <Label hint="metros">Radio permitido</Label>
+              <Label hint="metros">Radio para iniciar/finalizar viaje</Label>
               <Input
                 type="number"
                 min={10}
@@ -1492,7 +1529,40 @@ function PlatformSettingsSection() {
                 value={radius}
                 onChange={(e) => setRadius(e.target.value)}
               />
-              <p className="mt-1.5 text-[11px] text-ink-400">Entre 10 y 2000 metros. Aplica a todas las organizaciones.</p>
+              <p className="mt-1.5 text-[11px] text-ink-400">
+                Que tan cerca debe estar el operador del punto de recogida (para iniciar) o del destino (para
+                finalizar). Entre 10 y 2000 metros. Aplica a todas las organizaciones.
+              </p>
+            </div>
+            <div>
+              <Label hint="km">Radio de búsqueda de operadores</Label>
+              <Input
+                type="number"
+                step="0.5"
+                min={0.5}
+                max={50}
+                required
+                value={searchRadiusKm}
+                onChange={(e) => setSearchRadiusKm(e.target.value)}
+              />
+              <p className="mt-1.5 text-[11px] text-ink-400">
+                A cuantos km se le ofrece un viaje nuevo a un operador en línea, y a cuantos km un pasajero ve taxis
+                cercanos en su mapa. Entre 0.5 y 50 km.
+              </p>
+            </div>
+            <div>
+              <Label hint="opcional">Beneficio por invitar (programa de referidos)</Label>
+              <Textarea
+                rows={2}
+                maxLength={300}
+                value={rewardDescription}
+                onChange={(e) => setRewardDescription(e.target.value)}
+                placeholder="Ej. 1 viaje gratis por cada 3 personas que invites"
+              />
+              <p className="mt-1.5 text-[11px] text-ink-400">
+                Se le muestra a pasajeros y operadores junto a su código. No se aplica automáticamente (aún no hay
+                billetera/crédito en la app) - el beneficio se otorga manualmente.
+              </p>
             </div>
             {error && <AlertBox>{error}</AlertBox>}
             {message && <AlertBox tone="success">{message}</AlertBox>}
@@ -1500,6 +1570,31 @@ function PlatformSettingsSection() {
               Guardar
             </Button>
           </form>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader icon={UserPlus} title="Referidos" subtitle="Quién invitó a quién" />
+        {!referrals ? (
+          <p className="text-sm text-ink-400">Cargando...</p>
+        ) : referrals.length === 0 ? (
+          <EmptyState icon={Gift} title="Sin referidos todavía" description="Cuando alguien se registre con el código de otro usuario, aparecerá aquí." />
+        ) : (
+          <div className="space-y-2">
+            {referrals.map((r, i) => (
+              <div key={i} className="flex items-center justify-between rounded-xl border border-ink-100 p-3 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-ink-900">
+                    {r.referrerName} <span className="font-normal text-ink-400">invitó a</span> {r.referredName}
+                  </p>
+                  <p className="text-xs text-ink-500">
+                    {r.referredPhone} · {r.referredRole === 'DRIVER' ? 'Operador' : 'Pasajero'} ·{' '}
+                    {new Date(r.referredAt).toLocaleDateString('es-MX', { dateStyle: 'medium' })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
     </div>

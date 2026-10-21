@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { User, Phone, Mail, Lock, AlertCircle, Car, UserRound, Hash } from 'lucide-react'
+import { User, Phone, Mail, Lock, AlertCircle, Car, UserRound, Hash, Gift } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import BrandPanel from '../components/ui/BrandPanel'
 import Logo from '../components/ui/Logo'
@@ -21,6 +21,7 @@ const emptyForm = {
   taxiPlates: '',
   taxiBrand: '',
   taxiModel: '',
+  referralCode: '',
 }
 
 export default function RegisterPage() {
@@ -71,7 +72,14 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       if (role === 'PASSENGER') {
-        await register({ name: form.name, phone: form.phone, password: form.password, email: form.email, acceptedTerms })
+        await register({
+          name: form.name,
+          phone: form.phone,
+          password: form.password,
+          email: form.email,
+          acceptedTerms,
+          referralCode: form.referralCode || null,
+        })
         if (photo) {
           // La foto es un paso aparte del registro: si falla, no debe impedir que la cuenta quede
           // creada (se puede subir despues).
@@ -88,6 +96,7 @@ export default function RegisterPage() {
           taxiBrand: form.taxiBrand,
           taxiModel: form.taxiModel,
           acceptedTerms,
+          referralCode: form.referralCode || null,
         })
         if (photo) {
           await driverApi.uploadPhoto(photo).catch(() => {})
@@ -255,6 +264,17 @@ export default function RegisterPage() {
                 </p>
               </div>
             )}
+
+            <div>
+              <Label hint="opcional">Código de referido</Label>
+              <Input
+                icon={Gift}
+                value={form.referralCode}
+                onChange={(e) => setForm((f) => ({ ...f, referralCode: e.target.value.toUpperCase() }))}
+                placeholder="Si alguien te invitó, ponlo aquí"
+                maxLength={10}
+              />
+            </div>
 
             <label className="flex items-start gap-2 text-xs text-ink-600">
               <input

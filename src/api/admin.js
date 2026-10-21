@@ -68,3 +68,6 @@ export const driverCurrentTrip = (id) => api.get(`/api/admin/drivers/${id}/curre
 
 // Tarifas
 export const upsertTariff = (data) => api.post('/api/admin/tariffs', data)
+
+// Programa de referidos (solo lectura para admins)
+export const listReferrals = () => api.get('/api/admin/referrals')

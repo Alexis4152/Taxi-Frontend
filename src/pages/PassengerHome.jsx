@@ -22,6 +22,12 @@ import {
   Camera,
   AlertTriangle,
   UserX,
+  Home,
+  Briefcase,
+  Bookmark,
+  Plus,
+  Trash2,
+  KeyRound,
 } from 'lucide-react'
 import * as passengerApi from '../api/passenger'
 import Layout from '../components/Layout'
@@ -35,6 +41,7 @@ import { useConfirm } from '../components/ui/ConfirmDialog'
 import DetailListModal from '../components/DetailListModal'
 import TripHistoryRow from '../components/TripHistoryRow'
 import TripStatusStepper from '../components/TripStatusStepper'
+import ReferralCard from '../components/ReferralCard'
 import Card, { CardHeader } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -48,8 +55,19 @@ import { useGeolocation } from '../hooks/useGeolocation'
 import { useSubscription } from '../hooks/useSubscription'
 import { useTripChat } from '../hooks/useTripChat'
 import { useInactivityLogout } from '../hooks/useInactivityLogout'
+import { useBrowserNotifications } from '../hooks/useBrowserNotifications'
+import NotificationPermissionBanner from '../components/NotificationPermissionBanner'
 import { useAuth } from '../context/AuthContext'
-import { myActiveTripAsPassenger, myPassengerStats, myTripHistory, requestTrip, cancelTrip, nearbyDrivers, reportTrip } from '../api/trips'
+import {
+  myActiveTripAsPassenger,
+  myPassengerStats,
+  myTripHistory,
+  requestTrip,
+  cancelTrip,
+  nearbyDrivers,
+  reportTrip,
+  getVerificationCode,
+} from '../api/trips'
 import { reverseGeocode, searchAddress, debounce } from '../services/geocodingService'
 import { estimateRoute } from '../services/routingService'
 import { NEARBY_DRIVERS_POLL_MS } from '../config'
@@ -135,6 +153,7 @@ export default function PassengerHome() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const { position, error: geoError } = useGeolocation(true)
+  const { permission: notifPermission, requestPermission: requestNotifPermission, notify } = useBrowserNotifications()
   const [trip, setTrip] = useState(undefined) // undefined = cargando, null = sin viaje
   const [destination, setDestination] = useState(null)
   const [originAddress, setOriginAddress] = useState('')
@@ -163,13 +182,25 @@ export default function PassengerHome() {
   const [isScheduling, setIsScheduling] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
   const [tripOptionsOpen, setTripOptionsOpen] = useState(false)
-  const [tripOptions, setTripOptions] = useState({ babySeat: false, moreThanFourPassengers: false, hasPet: false, comments: '' })
+  const [tripOptions, setTripOptions] = useState({
+    babySeat: false,
+    moreThanFourPassengers: false,
+    hasPet: false,
+    requiresWheelchairAccessible: false,
+    comments: '',
+  })
   const [chatOpen, setChatOpen] = useState(false)
   const [historyModal, setHistoryModal] = useState(null)
   const [tripHistory, setTripHistory] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const [tipGiven, setTipGiven] = useState(0)
+  const [savedPlaces, setSavedPlaces] = useState([])
+  const [addPlaceOpen, setAddPlaceOpen] = useState(false)
+  const [newPlaceLabel, setNewPlaceLabel] = useState('')
+  const [savingPlace, setSavingPlace] = useState(false)
+  const [savedPlaceError, setSavedPlaceError] = useState('')
+  const [verificationCode, setVerificationCode] = useState(null)
   const geocodedOriginRef = useRef(false)
   const { confirm, ConfirmDialogElement } = useConfirm()
 
@@ -208,11 +239,14 @@ export default function PassengerHome() {
 
   const openHistory = () => openStatModal('Tus viajes', () => true)
 
+  const loadSavedPlaces = () => passengerApi.listSavedPlaces().then(({ data }) => setSavedPlaces(data.data)).catch(() => {})
+
   useEffect(() => {
     myActiveTripAsPassenger()
       .then(({ data }) => setTrip(data.data))
       .catch(() => setTrip(null))
     loadStats()
+    loadSavedPlaces()
     const loadProfile = () => passengerApi.myProfile().then(({ data }) => setProfile(data.data)).catch(() => {})
     loadProfile()
     // El operador puede calificar al pasajero en cualquier momento despues de terminar un viaje -
@@ -300,11 +334,27 @@ export default function PassengerHome() {
   useSubscription(
     trip ? `/topic/trip/${trip.id}` : null,
     (updated) => {
+      if (updated.status !== trip?.status && STATUS_COPY[updated.status]) {
+        notify('NexoraTaxis', { body: STATUS_COPY[updated.status].label })
+      }
       setTrip(updated)
       if (['COMPLETED', 'CANCELLED', 'NO_DRIVERS_AVAILABLE'].includes(updated.status)) setDriverLive(null)
     },
     Boolean(trip?.id)
   )
+
+  // El codigo se pide aparte (no viaje en el DTO del viaje) para que nunca se transmita por el
+  // WebSocket compartido con el operador - ver TripController.verificationCode().
+  useEffect(() => {
+    if (trip?.id && trip.status === 'ACCEPTED') {
+      getVerificationCode(trip.id)
+        .then(({ data }) => setVerificationCode(data.data))
+        .catch(() => {})
+    } else {
+      setVerificationCode(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.id, trip?.status])
 
   useSubscription(
     trip && ['ACCEPTED', 'IN_PROGRESS'].includes(trip.status) ? `/topic/trip/${trip.id}/driver-location` : null,
@@ -388,8 +438,59 @@ export default function PassengerHome() {
     }
   }
 
+  const selectSavedPlace = (place) => {
+    setDestination({ lat: place.lat, lng: place.lng })
+    setDestinationAddress(place.address)
+    setDestinationQuery('')
+  }
+
+  const handleSaveCurrentDestination = async () => {
+    if (!destination || !newPlaceLabel.trim()) return
+    setSavingPlace(true)
+    setSavedPlaceError('')
+    try {
+      await passengerApi.createSavedPlace({
+        label: newPlaceLabel.trim(),
+        address: destinationAddress,
+        lat: destination.lat,
+        lng: destination.lng,
+      })
+      setNewPlaceLabel('')
+      setAddPlaceOpen(false)
+      loadSavedPlaces()
+    } catch (err) {
+      setSavedPlaceError(err.response?.data?.message || 'No se pudo guardar la direccion')
+    } finally {
+      setSavingPlace(false)
+    }
+  }
+
+  const handleDeleteSavedPlace = async (place) => {
+    const ok = await confirm({
+      title: 'Eliminar dirección favorita',
+      message: `Se eliminará "${place.label}" de tus direcciones guardadas.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (!ok) return
+    await passengerApi.deleteSavedPlace(place.id).catch(() => {})
+    loadSavedPlaces()
+  }
+
+  const savedPlaceIcon = (label) => {
+    const normalized = label.trim().toLowerCase()
+    if (normalized === 'casa') return Home
+    if (normalized === 'trabajo') return Briefcase
+    return Bookmark
+  }
+
   const canRequest = origin && destination && originAddress && destinationAddress && !submitting
-  const tripOptionsCount = [tripOptions.babySeat, tripOptions.moreThanFourPassengers, tripOptions.hasPet].filter(Boolean).length
+  const tripOptionsCount = [
+    tripOptions.babySeat,
+    tripOptions.moreThanFourPassengers,
+    tripOptions.hasPet,
+    tripOptions.requiresWheelchairAccessible,
+  ].filter(Boolean).length
 
   const handleRequest = async () => {
     if (isScheduling && scheduledAt) {
@@ -415,6 +516,7 @@ export default function PassengerHome() {
         babySeat: tripOptions.babySeat,
         moreThanFourPassengers: tripOptions.moreThanFourPassengers,
         hasPet: tripOptions.hasPet,
+        requiresWheelchairAccessible: tripOptions.requiresWheelchairAccessible,
         comments: tripOptions.comments || null,
       })
       setTrip(data.data)
@@ -474,7 +576,7 @@ export default function PassengerHome() {
     setTipGiven(0)
     setIsScheduling(false)
     setScheduledAt('')
-    setTripOptions({ babySeat: false, moreThanFourPassengers: false, hasPet: false, comments: '' })
+    setTripOptions({ babySeat: false, moreThanFourPassengers: false, hasPet: false, requiresWheelchairAccessible: false, comments: '' })
   }
 
   const mapDriver = useMemo(() => driverLive, [driverLive])
@@ -559,15 +661,18 @@ export default function PassengerHome() {
       bottomBar={bottomBar}
       sidebar={
         !activeTrip && !finishedTrip && !scheduledTrip && !noDriversTrip ? (
-          <ProfileSidebar
-            profile={profile}
-            totalTrips={stats?.totalTrips}
-            onOpenRatings={openRatings}
-            onOpenHistory={openHistory}
-            onUploadPhoto={handleUploadPhoto}
-            uploadingPhoto={uploadingPhoto}
-            photoError={photoError}
-          />
+          <div className="space-y-4">
+            <ProfileSidebar
+              profile={profile}
+              totalTrips={stats?.totalTrips}
+              onOpenRatings={openRatings}
+              onOpenHistory={openHistory}
+              onUploadPhoto={handleUploadPhoto}
+              uploadingPhoto={uploadingPhoto}
+              photoError={photoError}
+            />
+            <ReferralCard />
+          </div>
         ) : null
       }
     >
@@ -599,6 +704,7 @@ export default function PassengerHome() {
         quickReplies={['Ya voy saliendo', 'Estoy en el punto de origen', 'Un momento por favor', '¿Cuánto tardas?', 'Gracias']}
       />
       <div className="space-y-5">
+        <NotificationPermissionBanner permission={notifPermission} onRequest={requestNotifPermission} />
         {!activeTrip && !finishedTrip && !scheduledTrip && !noDriversTrip && showWelcome && (
           <div className="relative animate-fade-in-up rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3.5 text-ink-800">
             <button onClick={() => setShowWelcome(false)} className="absolute right-3 top-3 text-ink-400 hover:text-ink-600">
@@ -709,6 +815,44 @@ export default function PassengerHome() {
                   </div>
                   {searchError && <p className="mt-1 text-[11px] text-red-600">{searchError}</p>}
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {savedPlaces.map((place) => {
+                    const Icon = savedPlaceIcon(place.label)
+                    return (
+                      <span
+                        key={place.id}
+                        className="group flex items-center gap-1 rounded-full border border-ink-200 bg-white py-1 pl-1 pr-2 text-xs font-medium text-ink-700"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => selectSavedPlace(place)}
+                          className="flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:text-brand-700"
+                        >
+                          <Icon className="h-3.5 w-3.5" /> {place.label}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSavedPlace(place)}
+                          aria-label={`Eliminar ${place.label}`}
+                          className="text-ink-300 hover:text-red-600"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                  <button
+                    type="button"
+                    disabled={!destination}
+                    onClick={() => setAddPlaceOpen(true)}
+                    title={destination ? 'Guardar este destino como favorito' : 'Primero elige un destino'}
+                    className="flex items-center gap-1 rounded-full border border-dashed border-ink-200 px-2 py-1 text-xs font-medium text-ink-500 hover:border-brand-400 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Guardar favorito
+                  </button>
+                </div>
+
                 <div>
                   <Label>Método de pago</Label>
                   <div className="grid grid-cols-2 gap-2">
@@ -789,6 +933,11 @@ export default function PassengerHome() {
               onChange={(v) => setTripOptions((o) => ({ ...o, moreThanFourPassengers: v }))}
             />
             <Switch label="Llevo una mascota" checked={tripOptions.hasPet} onChange={(v) => setTripOptions((o) => ({ ...o, hasPet: v }))} />
+            <Switch
+              label="Necesito auto con acceso para silla de ruedas"
+              checked={tripOptions.requiresWheelchairAccessible}
+              onChange={(v) => setTripOptions((o) => ({ ...o, requiresWheelchairAccessible: v }))}
+            />
           </div>
           <Textarea
             className="mt-3"
@@ -800,6 +949,36 @@ export default function PassengerHome() {
           />
           <Button variant="primary" className="mt-4 w-full" onClick={() => setTripOptionsOpen(false)}>
             Cerrar
+          </Button>
+        </Modal>
+
+        <Modal open={addPlaceOpen} onClose={() => setAddPlaceOpen(false)} title="Guardar dirección favorita">
+          <p className="mb-3 text-xs text-ink-500">{destinationAddress}</p>
+          <div className="mb-3 flex gap-2">
+            {['Casa', 'Trabajo'].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setNewPlaceLabel(preset)}
+                className={`rounded-xl border-2 px-3 py-1.5 text-xs font-semibold transition ${
+                  newPlaceLabel === preset ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                }`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+          <Label>Nombre</Label>
+          <Input value={newPlaceLabel} onChange={(e) => setNewPlaceLabel(e.target.value)} placeholder="Ej. Casa de mi mamá" maxLength={40} />
+          {savedPlaceError && <p className="mt-2 text-xs text-red-600">{savedPlaceError}</p>}
+          <Button
+            variant="brand"
+            className="mt-4 w-full"
+            loading={savingPlace}
+            disabled={!newPlaceLabel.trim()}
+            onClick={handleSaveCurrentDestination}
+          >
+            Guardar
           </Button>
         </Modal>
 
@@ -939,6 +1118,14 @@ export default function PassengerHome() {
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+              {activeTrip.status === 'ACCEPTED' && verificationCode && (
+                <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-50 px-3 py-2.5 text-amber-900">
+                  <span className="flex items-center gap-2 text-xs font-medium text-brand-800">
+                    <KeyRound className="h-3.5 w-3.5 shrink-0" /> Dile este código al operador al subir
+                  </span>
+                  <span className="text-lg font-bold tracking-[0.3em] text-brand-900">{verificationCode}</span>
                 </div>
               )}
               {activeTrip.driverName && (
