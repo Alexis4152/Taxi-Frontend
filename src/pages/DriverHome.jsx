@@ -28,6 +28,7 @@ import {
   AlertTriangle,
   Camera,
   Loader2,
+  Lock,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import MapView from '../components/map/MapView'
@@ -40,7 +41,7 @@ import DetailListModal from '../components/DetailListModal'
 import TripHistoryRow from '../components/TripHistoryRow'
 import TripStatusStepper from '../components/TripStatusStepper'
 import ReferralCard from '../components/ReferralCard'
-import Card from '../components/ui/Card'
+import Card, { CardHeader } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import PageLoader from '../components/ui/PageLoader'
@@ -67,6 +68,53 @@ const STATUS_COPY = {
 
 const MAP_HEIGHT = 'clamp(240px, 42dvh, 420px)'
 const API_URL = import.meta.env.VITE_API_URL || ''
+
+function feeLabel(type, value) {
+  return type === 'PERCENT' ? `${value}%` : `$${value} MXN`
+}
+
+function PaymentDueCard({ info }) {
+  if (!info) return null
+  const blocked = info.paymentBlocked
+  const hasDebt = Number(info.pendingAmount) > 0
+  const cardTone = blocked ? 'border-2 border-red-400 bg-red-50/40' : hasDebt ? 'border-2 border-amber-300 bg-amber-50/40' : ''
+  const subtitle = blocked
+    ? 'Conexión bloqueada hasta confirmar tu pago'
+    : hasDebt
+      ? 'Transfiere antes del plazo para seguir conectándote'
+      : 'Sin saldo pendiente por ahora'
+
+  return (
+    <Card className={cardTone}>
+      <CardHeader icon={blocked ? Lock : CreditCard} title="Monto por pagar" subtitle={subtitle} />
+      <p className="text-3xl font-bold text-ink-900">${info.pendingAmount} MXN</p>
+      {hasDebt && (
+        <p className="mt-1 text-xs text-ink-500">
+          {info.unpaidTripCount} de {info.tripThreshold} viajes sin pagar
+          {info.paymentDueAt && ` · vence ${new Date(info.paymentDueAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}`}
+        </p>
+      )}
+      {hasDebt &&
+        (info.clabe ? (
+          <div className="mt-3 rounded-xl bg-white/70 px-3 py-2.5 text-sm text-ink-700">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">CLABE para transferir</p>
+            <p className="font-mono text-base font-semibold tracking-wide">{info.clabe}</p>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-ink-500">Pide al administrador la CLABE para transferir.</p>
+        ))}
+      <p className="mt-3 text-[11px] text-ink-400">
+        Cobro por viaje: {feeLabel(info.operatorFeeType, info.operatorFeeValue)} tuyo + {feeLabel(info.passengerFeeType, info.passengerFeeValue)} del
+        pasajero.
+      </p>
+      {blocked && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-red-700">
+          <Lock className="h-3.5 w-3.5 shrink-0" /> Pide a un administrador que confirme tu pago para volver a conectarte.
+        </p>
+      )}
+    </Card>
+  )
+}
 
 function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange, onUploadPhoto, uploadingPhoto, photoError }) {
   const fileInputRef = useRef(null)
@@ -156,6 +204,7 @@ export default function DriverHome() {
   const [currentTaxi, setCurrentTaxi] = useState(undefined) // undefined = cargando, null = sin taxi asignado
   const [stats, setStats] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [paymentInfo, setPaymentInfo] = useState(null)
   const [ratingsOpen, setRatingsOpen] = useState(false)
   const [ratings, setRatings] = useState(null)
   const [ratingsLoading, setRatingsLoading] = useState(false)
@@ -260,6 +309,8 @@ export default function DriverHome() {
       .then(({ data }) => setTrip(data.data))
       .catch(() => setTrip(null))
     loadStats()
+    const loadPaymentInfo = () => driverApi.paymentInfo().then(({ data }) => setPaymentInfo(data.data)).catch(() => {})
+    loadPaymentInfo()
     const loadProfile = () => driverApi.myProfile().then(({ data }) => setProfile(data.data)).catch(() => {})
     // El backend es quien de verdad sabe si el operador seguia conectado (DriverLocation.online,
     // ver GET /api/driver/me) - sin restaurarlo aqui, cualquier refresh de pagina arrancaria el
@@ -280,6 +331,7 @@ export default function DriverHome() {
     const statsInterval = setInterval(() => {
       loadStats()
       loadProfile()
+      loadPaymentInfo()
     }, 15000)
     return () => clearInterval(statsInterval)
   }, [])
@@ -303,7 +355,16 @@ export default function DriverHome() {
   // llega ya respeta ese intervalo. Si el operador no esta en linea, no se envia nada.
   useEffect(() => {
     if (!online || !position) return
-    driverApi.pingLocation({ lat: position.lat, lng: position.lng, heading: position.heading }).catch(() => {})
+    driverApi.pingLocation({ lat: position.lat, lng: position.lng, heading: position.heading }).catch((err) => {
+      // Si justo se bloqueo por pago pendiente mientras ya estaba conectado (ej. llego al limite
+      // de viajes sin pagar a media jornada), el siguiente ping lo rechaza - se refleja de una vez
+      // en la UI en vez de dejarlo "conectado" localmente sin que el backend ya lo este tomando en
+      // cuenta para nuevas ofertas.
+      if (err.response?.status === 403) {
+        setOnline(false)
+        driverApi.paymentInfo().then(({ data }) => setPaymentInfo(data.data)).catch(() => {})
+      }
+    })
   }, [online, position])
 
   const handleToggleOnline = async () => {
@@ -311,6 +372,7 @@ export default function DriverHome() {
       await driverApi.goOffline()
       setOnline(false)
     } else {
+      if (paymentInfo?.paymentBlocked) return
       setOnline(true)
     }
   }
@@ -438,16 +500,18 @@ export default function DriverHome() {
 
   let bottomBar = null
   if (!activeTrip && !finishedTrip && offers.length === 0) {
+    const blocked = Boolean(paymentInfo?.paymentBlocked)
     bottomBar = (
       <Button
         variant={online ? 'danger' : 'success'}
         size="lg"
-        icon={Power}
+        icon={blocked && !online ? Lock : Power}
         onClick={handleToggleOnline}
-        disabled={!online && !currentTaxi}
+        disabled={!online && (!currentTaxi || blocked)}
+        title={blocked && !online ? 'Tienes un pago pendiente, no puedes conectarte hasta que se confirme' : undefined}
         className="w-full"
       >
-        {online ? 'Desconectarme' : 'Conectarme'}
+        {online ? 'Desconectarme' : blocked ? 'Conéctate pagando tu saldo pendiente' : 'Conectarme'}
       </Button>
     )
   } else if (activeTrip?.status === 'ACCEPTED') {
@@ -558,7 +622,17 @@ export default function DriverHome() {
         title={historyModal?.title}
         loading={historyLoading}
         items={historyModal && tripHistory ? tripHistory.filter(historyModal.filterFn) : null}
-        renderItem={(t) => <TripHistoryRow trip={t} onReport={(trip) => setReportTripId(trip.id)} />}
+        renderItem={(t) => (
+          <TripHistoryRow
+            trip={t}
+            onReport={(trip) => {
+              // Mismo fix que en PassengerHome: cerrar el modal de historial antes de abrir el de
+              // reporte para que no queden dos overlays montados a la vez bloqueando los clics.
+              setHistoryModal(null)
+              setReportTripId(trip.id)
+            }}
+          />
+        )}
         emptyMessage="No hay viajes que coincidan con esto todavía."
       />
       <Modal open={taxiChangeOpen} onClose={closeTaxiChangeModal} title="Solicitar cambio de taxi">
@@ -607,6 +681,7 @@ export default function DriverHome() {
       </Modal>
       <div className="space-y-5">
         <NotificationPermissionBanner permission={notifPermission} onRequest={requestNotifPermission} />
+        {!activeTrip && !finishedTrip && <PaymentDueCard info={paymentInfo} />}
         {!activeTrip && !finishedTrip && offers.length > 0 && (() => {
           // Se muestra solo la mas urgente (la primera que llego expira primero, todas comparten
           // la misma vigencia) con un contador de las demas, en vez de apilarlas todas - si se
@@ -935,6 +1010,16 @@ export default function DriverHome() {
                 <Button variant="outline" onClick={handleConfirmPayment} className="mt-4 w-full">
                   Confirmar transferencia recibida
                 </Button>
+              )}
+              {finishedTrip.passengerName && (
+                <button
+                  type="button"
+                  onClick={() => setReportTripId(finishedTrip.id)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Reportar un problema
+                </button>
               )}
             </Card>
             {finishedTrip.status === 'COMPLETED' && !rated && (

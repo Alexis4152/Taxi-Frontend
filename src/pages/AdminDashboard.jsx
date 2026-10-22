@@ -613,11 +613,21 @@ function DriversSection({ orgId, isSuperAdmin }) {
                 {d.ratingAvg !== undefined ? ` · ${d.ratingAvg}★ (${d.ratingCount})` : d.taxiUnitNumber ? ` · Unidad ${d.taxiUnitNumber}` : ' · Sin taxi asignado'}
               </p>
             </div>
-            {d.active !== undefined ? (
-              <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Activo' : 'Baja'}</Badge>
-            ) : (
-              <Badge tone={d.onTrip ? 'info' : 'success'}>{d.onTrip ? 'En viaje' : 'En línea'}</Badge>
-            )}
+            <div className="flex flex-col items-end gap-1">
+              {d.active !== undefined ? (
+                <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Activo' : 'Baja'}</Badge>
+              ) : (
+                <Badge tone={d.onTrip ? 'info' : 'success'}>{d.onTrip ? 'En viaje' : 'En línea'}</Badge>
+              )}
+              {d.pendingAmount !== undefined &&
+                (Number(d.pendingAmount) > 0 ? (
+                  <Badge tone={d.paymentBlocked ? 'danger' : 'warning'}>
+                    ${d.pendingAmount} {d.paymentBlocked ? 'bloqueado' : 'pendiente'}
+                  </Badge>
+                ) : (
+                  <Badge tone="success">Al corriente</Badge>
+                ))}
+            </div>
           </button>
         )}
       />
@@ -637,6 +647,13 @@ function DriversSection({ orgId, isSuperAdmin }) {
           value={onlineInScope.length}
           tone="success"
           onClick={() => setListModal({ title: 'Operadores conectados', items: onlineInScope })}
+        />
+        <StatCard
+          icon={CreditCard}
+          label="Pagos pendientes"
+          value={drivers.filter((d) => Number(d.pendingAmount) > 0).length}
+          tone="danger"
+          onClick={() => setListModal({ title: 'Pagos pendientes', items: drivers.filter((d) => Number(d.pendingAmount) > 0) })}
         />
       </div>
 
@@ -799,6 +816,7 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
   const [taxiId, setTaxiId] = useState('')
   const [taxiBusy, setTaxiBusy] = useState(false)
   const [taxiError, setTaxiError] = useState('')
+  const [markingPaid, setMarkingPaid] = useState(false)
   const { confirm, ConfirmDialogElement } = useConfirm()
 
   const openRatings = () => {
@@ -863,6 +881,25 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
     }
   }
 
+  const handleMarkPaid = async () => {
+    const ok = await confirm({
+      title: 'Confirmar pago recibido',
+      message: `Se marcará el saldo de ${driver.name} ($${driver.pendingAmount} MXN) como pagado y recuperará acceso para conectarse. ¿Continuar?`,
+      confirmLabel: 'Confirmar pago',
+    })
+    if (!ok) return
+    setMarkingPaid(true)
+    try {
+      await adminApi.markDriverPaid(driverId)
+      await loadDriver()
+      onSaved()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo confirmar el pago')
+    } finally {
+      setMarkingPaid(false)
+    }
+  }
+
   if (!driver || !form) {
     return (
       <Modal open onClose={onClose} title="Cargando...">
@@ -902,6 +939,23 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
             </p>
             <p className="font-semibold text-ink-900">${currentTrip.estimatedFare} MXN</p>
           </div>
+        </div>
+      )}
+      {Number(driver.pendingAmount) > 0 && (
+        <div className={`mb-4 rounded-xl border p-3 text-xs ${driver.paymentBlocked ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+          <div className="flex items-center justify-between">
+            <p className="font-semibold text-ink-900">
+              Saldo pendiente: <span className={driver.paymentBlocked ? 'text-red-700' : 'text-amber-800'}>${driver.pendingAmount} MXN</span>
+            </p>
+            {driver.paymentBlocked && <Badge tone="danger">Bloqueado</Badge>}
+          </div>
+          <p className="mt-1 text-ink-500">
+            {driver.unpaidTripCount} viajes sin pagar
+            {driver.paymentDueAt && ` · vence ${new Date(driver.paymentDueAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}`}
+          </p>
+          <Button variant="brand" size="sm" className="mt-2 w-full" loading={markingPaid} onClick={handleMarkPaid}>
+            Confirmar pago recibido
+          </Button>
         </div>
       )}
       <form onSubmit={handleSave} className="space-y-4">
@@ -1385,45 +1439,175 @@ const REPORT_ROLE_LABEL = {
   DRIVER: 'Operador',
 }
 
-function TripReportsSection() {
-  const [reports, setReports] = useState([])
-  const [busyId, setBusyId] = useState(null)
+function ReportPersonCard({ title, person }) {
+  if (!person) return null
+  return (
+    <div className="rounded-xl border border-ink-100 p-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">{title}</p>
+      <div className="flex items-center gap-3">
+        <Avatar url={photoSrc(person.photoUrl)} icon={UserRound} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink-900">{person.name}</p>
+          <p className="flex items-center gap-1 text-xs text-ink-500">
+            <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" /> {person.ratingAvg ?? '—'} ({person.ratingCount ?? 0})
+          </p>
+        </div>
+      </div>
+      <div className="mt-2 space-y-1 text-xs text-ink-600">
+        <p className="flex items-center gap-2">
+          <Phone className="h-3.5 w-3.5 shrink-0 text-ink-400" /> {person.phone}
+        </p>
+        {person.email && (
+          <p className="flex items-center gap-2">
+            <Mail className="h-3.5 w-3.5 shrink-0 text-ink-400" /> {person.email}
+          </p>
+        )}
+        {person.taxiUnitNumber && (
+          <p className="flex items-center gap-2">
+            <Car className="h-3.5 w-3.5 shrink-0 text-ink-400" /> Unidad {person.taxiUnitNumber} ({person.taxiPlates})
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TripReportDetailModal({ report, onClose, onResolved }) {
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const { confirm, ConfirmDialogElement } = useConfirm()
 
-  const load = () => adminApi.listTripReports().then(({ data }) => setReports(data.data))
-  useEffect(() => {
-    load()
-  }, [])
-
-  const handleResolve = async (report) => {
-    const ok = await confirm({
-      title: 'Marcar reporte como resuelto',
-      message: `El reporte de ${report.reporterName} sobre el viaje #${report.tripId} se marcará como resuelto. ¿Continuar?`,
-      confirmLabel: 'Marcar resuelto',
-    })
-    if (!ok) return
-    setBusyId(report.id)
+  const handleResolve = async () => {
+    setSaving(true)
     setError('')
     try {
-      await adminApi.resolveTripReport(report.id)
-      load()
+      await adminApi.resolveTripReport(report.id, comment.trim())
+      onResolved()
     } catch (err) {
       setError(err.response?.data?.message || 'No se pudo resolver el reporte')
     } finally {
-      setBusyId(null)
+      setSaving(false)
     }
   }
 
+  const isPending = report.status === 'PENDING'
+
+  return (
+    <Modal open onClose={onClose} title={`${REPORT_CATEGORY_LABEL[report.category] || report.category} · Viaje #${report.tripId}`} wide>
+      <div className="space-y-4">
+        <div className="rounded-xl bg-ink-50 p-3 text-sm text-ink-700">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-400">
+            Reportado por {REPORT_ROLE_LABEL[report.reporterRole] || report.reporterRole} {report.reporterName}
+          </p>
+          {report.description}
+        </div>
+
+        {report.trip && (
+          <div className="space-y-1.5 text-sm text-ink-700">
+            <p className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 shrink-0 text-emerald-600" /> {report.trip.originAddress}
+            </p>
+            <p className="flex items-center gap-2">
+              <Flag className="h-4 w-4 shrink-0 text-red-500" /> {report.trip.destinationAddress}
+            </p>
+            <p className="text-xs text-ink-500">
+              {report.trip.requestedAt && new Date(report.trip.requestedAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
+              {report.trip.estimatedFare != null && ` · $${report.trip.estimatedFare} MXN`}
+              {report.trip.status && ` · ${report.trip.status}`}
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <ReportPersonCard title="Pasajero" person={report.passenger} />
+          <ReportPersonCard title="Operador" person={report.driver} />
+        </div>
+
+        {isPending ? (
+          <div>
+            <Label>Comentario de resolución</Label>
+            <Textarea
+              rows={3}
+              maxLength={500}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Explica cómo se resolvió este reporte - se le notificará por correo al pasajero y al operador"
+            />
+            {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+            <Button
+              variant="brand"
+              className="mt-3 w-full"
+              loading={saving}
+              disabled={!comment.trim()}
+              onClick={handleResolve}
+            >
+              Marcar resuelto y notificar a ambos
+            </Button>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-600">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Resuelto por {report.resolvedByName}
+              {report.resolvedAt && ` · ${new Date(report.resolvedAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}`}
+            </p>
+            {report.resolutionComment}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function TripReportsSection() {
+  const [tab, setTab] = useState('PENDING')
+  const [reports, setReports] = useState([])
+  const [error, setError] = useState('')
+  const [selected, setSelected] = useState(null)
+
+  const load = (status = tab) =>
+    adminApi.listTripReports(status).then(({ data }) => setReports(data.data)).catch(() => setError('No se pudieron cargar los reportes'))
+  useEffect(() => {
+    load(tab)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
+
+  const isPendingTab = tab === 'PENDING'
+
   return (
     <div className="space-y-5">
-      <ConfirmDialogElement />
+      {selected && (
+        <TripReportDetailModal
+          report={selected}
+          onClose={() => setSelected(null)}
+          onResolved={() => {
+            setSelected(null)
+            load()
+          }}
+        />
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          { value: 'PENDING', label: 'Pendientes' },
+          { value: 'RESOLVED', label: 'Resueltos' },
+        ].map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setTab(opt.value)}
+            className={`flex min-h-10 items-center justify-center rounded-xl border-2 text-sm font-semibold transition ${
+              tab === opt.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
       <Card padded={false}>
         <CardHeader
           className="px-5 pt-5"
           icon={AlertTriangle}
           title="Reportes de viaje"
-          subtitle={`${reports.length} pendientes · un pasajero u operador los crea desde su viaje`}
+          subtitle={`${reports.length} ${isPendingTab ? 'pendientes' : 'resueltos'} · un pasajero u operador los crea desde su viaje`}
         />
         {error && (
           <div className="px-5 pb-3">
@@ -1432,26 +1616,29 @@ function TripReportsSection() {
         )}
         {reports.length === 0 ? (
           <div className="px-5 pb-5">
-            <EmptyState icon={AlertTriangle} title="Sin reportes pendientes" description="Aquí aparecerán cuando alguien reporte un problema en un viaje." />
+            <EmptyState
+              icon={AlertTriangle}
+              title={isPendingTab ? 'Sin reportes pendientes' : 'Sin reportes resueltos todavía'}
+              description={isPendingTab ? 'Aquí aparecerán cuando alguien reporte un problema en un viaje.' : 'Aquí aparecerán los reportes ya resueltos.'}
+            />
           </div>
         ) : (
           reports.map((r) => (
             <ListRow
               key={r.id}
+              onClick={() => setSelected(r)}
               avatar={
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                <span
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                    isPendingTab ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'
+                  }`}
+                >
                   <AlertTriangle className="h-4.5 w-4.5" />
                 </span>
               }
               title={`${REPORT_CATEGORY_LABEL[r.category] || r.category} · Viaje #${r.tripId}`}
-              subtitle={`${REPORT_ROLE_LABEL[r.reporterRole] || r.reporterRole} ${r.reporterName}${
-                r.otherPartyName ? ` sobre ${r.otherPartyName}` : ''
-              } · ${r.description}`}
-              right={
-                <Button variant="brand" size="sm" disabled={busyId !== null} loading={busyId === r.id} onClick={() => handleResolve(r)}>
-                  Marcar resuelto
-                </Button>
-              }
+              subtitle={`${REPORT_ROLE_LABEL[r.reporterRole] || r.reporterRole} ${r.reporterName} · ${r.description}`}
+              right={<Badge tone="neutral">Ver detalle</Badge>}
             />
           ))
         )}
@@ -1466,20 +1653,36 @@ function PlatformSettingsSection() {
   const [radius, setRadius] = useState('')
   const [searchRadiusKm, setSearchRadiusKm] = useState('')
   const [rewardDescription, setRewardDescription] = useState('')
+  const [clabe, setClabe] = useState('')
+  const [operatorFeeType, setOperatorFeeType] = useState('FIXED')
+  const [operatorFeeValue, setOperatorFeeValue] = useState('0')
+  const [passengerFeeType, setPassengerFeeType] = useState('FIXED')
+  const [passengerFeeValue, setPassengerFeeValue] = useState('0')
+  const [paymentDeadlineHour, setPaymentDeadlineHour] = useState('12')
+  const [paymentTripThreshold, setPaymentTripThreshold] = useState('20')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [referrals, setReferrals] = useState(null)
 
+  const applySettings = (s) => {
+    setRadius(String(s.tripGeofenceRadiusMeters))
+    setSearchRadiusKm(String(s.dispatchSearchRadiusKm))
+    setRewardDescription(s.referralRewardDescription || '')
+    setClabe(s.clabe || '')
+    setOperatorFeeType(s.operatorFeeType)
+    setOperatorFeeValue(String(s.operatorFeeValue))
+    setPassengerFeeType(s.passengerFeeType)
+    setPassengerFeeValue(String(s.passengerFeeValue))
+    setPaymentDeadlineHour(String(s.paymentDeadlineHour))
+    setPaymentTripThreshold(String(s.paymentTripThreshold))
+  }
+
   useEffect(() => {
     adminApi
       .getPlatformSettings()
-      .then(({ data }) => {
-        setRadius(String(data.data.tripGeofenceRadiusMeters))
-        setSearchRadiusKm(String(data.data.dispatchSearchRadiusKm))
-        setRewardDescription(data.data.referralRewardDescription || '')
-      })
+      .then(({ data }) => applySettings(data.data))
       .catch(() => setError('No se pudo cargar la configuración'))
       .finally(() => setLoading(false))
     adminApi.listReferrals().then(({ data }) => setReferrals(data.data)).catch(() => {})
@@ -1495,10 +1698,15 @@ function PlatformSettingsSection() {
         tripGeofenceRadiusMeters: Number(radius),
         dispatchSearchRadiusKm: Number(searchRadiusKm),
         referralRewardDescription: rewardDescription || null,
+        clabe: clabe || null,
+        operatorFeeType,
+        operatorFeeValue: Number(operatorFeeValue),
+        passengerFeeType,
+        passengerFeeValue: Number(passengerFeeValue),
+        paymentDeadlineHour: Number(paymentDeadlineHour),
+        paymentTripThreshold: Number(paymentTripThreshold),
       })
-      setRadius(String(data.data.tripGeofenceRadiusMeters))
-      setSearchRadiusKm(String(data.data.dispatchSearchRadiusKm))
-      setRewardDescription(data.data.referralRewardDescription || '')
+      applySettings(data.data)
       setMessage(data.message || 'Configuración actualizada')
     } catch (err) {
       setError(err.response?.data?.message || 'No se pudo guardar la configuración')
@@ -1507,18 +1715,26 @@ function PlatformSettingsSection() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <Card>
+          <p className="text-sm text-ink-400">Cargando...</p>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
-      <Card>
-        <CardHeader
-          icon={SlidersHorizontal}
-          title="Radios de operación"
-          subtitle="Que tan cerca debe estar el operador del punto de recogida/destino, y hasta donde se le ofrecen viajes"
-        />
-        {loading ? (
-          <p className="text-sm text-ink-400">Cargando...</p>
-        ) : (
-          <form onSubmit={handleSave} className="space-y-3">
+      <form onSubmit={handleSave} className="space-y-5">
+        <Card>
+          <CardHeader
+            icon={SlidersHorizontal}
+            title="Radios de operación"
+            subtitle="Que tan cerca debe estar el operador del punto de recogida/destino, y hasta donde se le ofrecen viajes"
+          />
+          <div className="space-y-3">
             <div>
               <Label hint="metros">Radio para iniciar/finalizar viaje</Label>
               <Input
@@ -1564,14 +1780,105 @@ function PlatformSettingsSection() {
                 billetera/crédito en la app) - el beneficio se otorga manualmente.
               </p>
             </div>
-            {error && <AlertBox>{error}</AlertBox>}
-            {message && <AlertBox tone="success">{message}</AlertBox>}
-            <Button type="submit" variant="brand" loading={saving} className="w-full">
-              Guardar
-            </Button>
-          </form>
-        )}
-      </Card>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader
+            icon={CreditCard}
+            title="Cobros y pagos de operadores"
+            subtitle="Cuánto se cobra por viaje y cuándo se bloquea a un operador por no pagar"
+          />
+          <div className="space-y-3">
+            <div>
+              <Label hint="18 dígitos, opcional">CLABE de la plataforma</Label>
+              <Input
+                value={clabe}
+                onChange={(e) => setClabe(e.target.value.replace(/\D/g, '').slice(0, 18))}
+                placeholder="Para que los operadores te transfieran su saldo"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Cobro al operador</Label>
+                <div className="flex gap-2">
+                  <Select value={operatorFeeType} onChange={(e) => setOperatorFeeType(e.target.value)} className="w-28 shrink-0">
+                    <option value="FIXED">$ fijo</option>
+                    <option value="PERCENT">%</option>
+                  </Select>
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      required
+                      value={operatorFeeValue}
+                      onChange={(e) => setOperatorFeeValue(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <Label>Cobro al pasajero</Label>
+                <div className="flex gap-2">
+                  <Select value={passengerFeeType} onChange={(e) => setPassengerFeeType(e.target.value)} className="w-28 shrink-0">
+                    <option value="FIXED">$ fijo</option>
+                    <option value="PERCENT">%</option>
+                  </Select>
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      required
+                      value={passengerFeeValue}
+                      onChange={(e) => setPassengerFeeValue(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-ink-400">
+              El cobro al pasajero se le suma a la tarifa automáticamente al pedir un viaje. El operador debe ambos
+              cobros a la plataforma por cada viaje que completa (ver "monto por pagar" en su panel).
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label hint="0-23">Hora límite del día siguiente</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={23}
+                  required
+                  value={paymentDeadlineHour}
+                  onChange={(e) => setPaymentDeadlineHour(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label hint="viajes">Máximo sin pagar</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  required
+                  value={paymentTripThreshold}
+                  onChange={(e) => setPaymentTripThreshold(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-ink-400">
+              Si un operador no paga antes de esa hora del día siguiente a su primer viaje sin pagar, o si acumula ese
+              número de viajes sin pagar (lo que pase primero), se bloquea su acceso a conectarse hasta que un admin
+              confirme su pago.
+            </p>
+          </div>
+        </Card>
+
+        {error && <AlertBox>{error}</AlertBox>}
+        {message && <AlertBox tone="success">{message}</AlertBox>}
+        <Button type="submit" variant="brand" loading={saving} className="w-full">
+          Guardar
+        </Button>
+      </form>
 
       <Card>
         <CardHeader icon={UserPlus} title="Referidos" subtitle="Quién invitó a quién" />

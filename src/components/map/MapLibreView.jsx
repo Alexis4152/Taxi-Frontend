@@ -97,6 +97,17 @@ export default function MapLibreView({
     else map.once('load', apply)
   }, [routeGeometry])
 
+  // Solo se reencuadra cuando aparece/desaparece/se mueve de verdad un origen/destino/operador (o
+  // cambia la cantidad de operadores disponibles) - no en cada ping de GPS, para que el mapa no
+  // salte de zoom/centro mientras el usuario lo esta viendo. origin/destination/driver llegan como
+  // un objeto literal nuevo en cada render (incluso con el mismo lat/lng, ej. cada ~5s de ping
+  // mientras hay un viaje activo), asi que no sirven como dependencia directa por referencia; se
+  // redondean a ~111m para que el ruido normal del GPS no cuente como "se movio", pero elegir un
+  // destino genuinamente distinto (una direccion nueva) si lo haga.
+  const roundCoord = (point) => (point ? `${point.lat.toFixed(3)},${point.lng.toFixed(3)}` : '')
+  const originKey = roundCoord(origin)
+  const destinationKey = roundCoord(destination)
+  const driverKey = roundCoord(driver)
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -105,10 +116,8 @@ export default function MapLibreView({
     const run = () => mapService.fitToPoints(map, points)
     if (map.isStyleLoaded()) run()
     else map.once('load', run)
-    // Solo se reencuadra cuando aparece/desaparece un origen/destino/operador o cambia la
-    // cantidad de operadores disponibles - no en cada actualizacion de posicion, para que el
-    // mapa no salte de zoom/centro mientras el usuario lo esta viendo.
-  }, [origin, destination, driver, availableDrivers.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originKey, destinationKey, driverKey, availableDrivers.length])
 
   if (!webglSupported) {
     return (

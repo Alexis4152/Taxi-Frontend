@@ -82,6 +82,10 @@ const STATUS_COPY = {
 }
 
 const MAP_HEIGHT = 'clamp(240px, 42dvh, 420px)'
+
+// La tarifa que paga el pasajero incluye el cobro de servicio de la plataforma (ver
+// PlatformSettingsService/DriverBillingService) ademas de la tarifa del viaje.
+const totalToPay = (fare, fee) => (Number(fare || 0) + Number(fee || 0)).toFixed(2)
 const API_URL = import.meta.env.VITE_API_URL || ''
 
 const debouncedSearch = debounce(searchAddress, 500)
@@ -611,7 +615,12 @@ export default function PassengerHome() {
             <span className="text-ink-600">
               {preview.distanceKm} km &middot; ~{Math.round(preview.durationMin)} min
             </span>
-            <span className="font-bold text-ink-900">${preview.estimatedFare} MXN</span>
+            <span className="text-right">
+              <span className="block font-bold text-ink-900">${totalToPay(preview.estimatedFare, preview.passengerServiceFee)} MXN</span>
+              {Number(preview.passengerServiceFee) > 0 && (
+                <span className="block text-[11px] text-ink-400">incluye ${preview.passengerServiceFee} de servicio</span>
+              )}
+            </span>
           </div>
         )}
         {error && <p className="text-xs text-red-600">{error}</p>}
@@ -690,7 +699,19 @@ export default function PassengerHome() {
         title={historyModal?.title}
         loading={historyLoading}
         items={historyModal && tripHistory ? tripHistory.filter(historyModal.filterFn) : null}
-        renderItem={(t) => <TripHistoryRow trip={t} onReport={(trip) => setReportTripId(trip.id)} />}
+        renderItem={(t) => (
+          <TripHistoryRow
+            trip={t}
+            onReport={(trip) => {
+              // Cerrar el modal de historial antes de abrir el de reporte: ambos son overlays de
+              // pantalla completa (mismo z-index) y si los dos quedan montados a la vez, el que se
+              // declara despues en el JSX (el de historial) pinta encima y bloquea los clics del
+              // formulario de reporte que esta debajo.
+              setHistoryModal(null)
+              setReportTripId(trip.id)
+            }}
+          />
+        )}
         emptyMessage="No hay viajes que coincidan con esto todavía."
       />
       <ChatPanel
@@ -1035,11 +1056,12 @@ export default function PassengerHome() {
 
               <div className="flex items-center justify-between border-t border-ink-100 pt-4">
                 <Badge tone={STATUS_COPY[activeTrip.status]?.tone}>{STATUS_COPY[activeTrip.status]?.label}</Badge>
-                <span className="text-sm font-bold text-ink-900">${activeTrip.estimatedFare} MXN</span>
+                <span className="text-sm font-bold text-ink-900">${totalToPay(activeTrip.estimatedFare, activeTrip.passengerServiceFee)} MXN</span>
               </div>
               <p className="mt-1 text-xs text-ink-500">
                 {activeTrip.distanceKm} km &middot; ~{Math.round(activeTrip.durationMin)} min &middot;{' '}
                 {activeTrip.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}
+                {Number(activeTrip.passengerServiceFee) > 0 && ` · incluye $${activeTrip.passengerServiceFee} de servicio`}
               </p>
 
               {activeTrip.paymentMethod === 'TRANSFER' && activeTrip.driverBankAccount && (
@@ -1146,8 +1168,22 @@ export default function PassengerHome() {
             <Card>
               <div className="flex items-center justify-between">
                 <Badge tone={STATUS_COPY[finishedTrip.status]?.tone}>{STATUS_COPY[finishedTrip.status]?.label}</Badge>
-                {finishedTrip.status === 'COMPLETED' && <span className="text-lg font-bold text-ink-900">${finishedTrip.estimatedFare} MXN</span>}
+                {finishedTrip.status === 'COMPLETED' && (
+                  <span className="text-lg font-bold text-ink-900">
+                    ${totalToPay(finishedTrip.estimatedFare, finishedTrip.passengerServiceFee)} MXN
+                  </span>
+                )}
               </div>
+              {finishedTrip.driverName && (
+                <button
+                  type="button"
+                  onClick={() => setReportTripId(finishedTrip.id)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Reportar un problema
+                </button>
+              )}
             </Card>
             {finishedTrip.status === 'COMPLETED' && !rated && finishedTrip.driverName && (
               <RatingForm

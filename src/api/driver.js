@@ -20,3 +20,4 @@ export const rejectOffer = (tripId, offerId) => api.post(`/api/driver/trips/${tr
 export const startTrip = (tripId, verificationCode) => api.post(`/api/driver/trips/${tripId}/start`, { verificationCode })
 export const completeTrip = (tripId) => api.post(`/api/driver/trips/${tripId}/complete`)
 export const confirmPayment = (tripId) => api.post(`/api/driver/trips/${tripId}/confirm-payment`)
+export const paymentInfo = () => api.get('/api/driver/payment-info')

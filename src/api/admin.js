@@ -31,6 +31,7 @@ export const setDriverActive = (id, active) =>
   api.patch(`/api/admin/drivers/${id}/active`, null, { params: { active } })
 export const assignDriverTaxi = (id, taxiId) =>
   api.patch(`/api/admin/drivers/${id}/taxi`, null, { params: { taxiId: taxiId ?? undefined } })
+export const markDriverPaid = (id) => api.post(`/api/admin/drivers/${id}/mark-paid`)
 
 // Taxis
 export const listTaxis = () => api.get('/api/admin/taxis')
@@ -51,8 +52,8 @@ export const approveTaxiChangeRequest = (id) => api.post(`/api/admin/taxi-change
 export const rejectTaxiChangeRequest = (id) => api.post(`/api/admin/taxi-change-requests/${id}/reject`)
 
 // Reportes de viaje (pasajero u operador reportando un problema en un viaje especifico)
-export const listTripReports = () => api.get('/api/admin/trip-reports')
-export const resolveTripReport = (id) => api.post(`/api/admin/trip-reports/${id}/resolve`)
+export const listTripReports = (status = 'PENDING') => api.get('/api/admin/trip-reports', { params: { status } })
+export const resolveTripReport = (id, comment) => api.post(`/api/admin/trip-reports/${id}/resolve`, { comment })
 
 // Usuarios (pasajeros, solo SUPER_ADMIN)
 export const listPassengers = () => api.get('/api/admin/passengers')
