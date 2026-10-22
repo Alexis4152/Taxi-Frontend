@@ -19,9 +19,9 @@ export default function StatCard({ icon: Icon, label, value, tone = 'ink', onCli
       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tones[tone]}`}>
         <Icon className="h-5 w-5" />
       </span>
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="text-lg font-bold leading-none text-ink-900">{value}</p>
-        <p className="mt-1 text-xs text-ink-500">{label}</p>
+        <p className="mt-1 text-xs leading-snug text-ink-500">{label}</p>
       </div>
     </Tag>
   )

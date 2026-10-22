@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   Power,
@@ -68,6 +68,11 @@ const STATUS_COPY = {
 
 const MAP_HEIGHT = 'clamp(240px, 42dvh, 420px)'
 const API_URL = import.meta.env.VITE_API_URL || ''
+
+// Lo que el operador debe cobrarle en efectivo al pasajero: la tarifa mas el cobro de servicio que
+// se le sumo al pasajero (ver PlatformSettingsService/DriverBillingService) - sin esto, el
+// operador veria solo la tarifa base y le cobraria de menos al pasajero.
+const totalToCharge = (fare, fee) => (Number(fare || 0) + Number(fee || 0)).toFixed(2)
 
 function feeLabel(type, value) {
   return type === 'PERCENT' ? `${value}%` : `$${value} MXN`
@@ -350,12 +355,15 @@ export default function DriverHome() {
     return () => clearInterval(interval)
   }, [])
 
-  // useGeolocation ya limita cuantas veces por segundo reporta una posicion nueva
-  // (VITE_LOCATION_UPDATE_MS), asi que aqui no hace falta throttle adicional: cada posicion que
-  // llega ya respeta ese intervalo. Si el operador no esta en linea, no se envia nada.
-  useEffect(() => {
-    if (!online || !position) return
-    driverApi.pingLocation({ lat: position.lat, lng: position.lng, heading: position.heading }).catch((err) => {
+  // Se guarda en un ref ademas de en el estado para que handleVisibilityResume (que se registra
+  // una sola vez) siempre lea la posicion mas reciente, no la que habia cuando se registro.
+  const positionRef = useRef(position)
+  positionRef.current = position
+
+  const pingNow = useCallback(() => {
+    const pos = positionRef.current
+    if (!pos) return
+    driverApi.pingLocation({ lat: pos.lat, lng: pos.lng, heading: pos.heading }).catch((err) => {
       // Si justo se bloqueo por pago pendiente mientras ya estaba conectado (ej. llego al limite
       // de viajes sin pagar a media jornada), el siguiente ping lo rechaza - se refleja de una vez
       // en la UI en vez de dejarlo "conectado" localmente sin que el backend ya lo este tomando en
@@ -365,7 +373,32 @@ export default function DriverHome() {
         driverApi.paymentInfo().then(({ data }) => setPaymentInfo(data.data)).catch(() => {})
       }
     })
-  }, [online, position])
+  }, [])
+
+  // useGeolocation ya limita cuantas veces por segundo reporta una posicion nueva
+  // (VITE_LOCATION_UPDATE_MS), asi que aqui no hace falta throttle adicional: cada posicion que
+  // llega ya respeta ese intervalo. Si el operador no esta en linea, no se envia nada.
+  useEffect(() => {
+    if (!online || !position) return
+    pingNow()
+  }, [online, position, pingNow])
+
+  // Al minimizar la pestaña o bloquear la pantalla, el navegador puede suspender el GPS y hasta
+  // cerrar el WebSocket para ahorrar bateria - cualquier oferta que haya llegado mientras tanto se
+  // pierde (el backend no la reintenta sola hasta que el operador vuelva a hacer ping, ver
+  // TripService.dispatchPendingTripsToNewlyOnlineDriver). En vez de esperar a que el GPS entregue
+  // una lectura nueva por su cuenta, se manda un ping de inmediato en cuanto la pestaña vuelve a
+  // estar visible, para recuperar mas rapido cualquier solicitud que se haya quedado pendiente.
+  // Esto no resuelve "recibir solicitudes con la pantalla apagada" (eso requeriria notificaciones
+  // push reales con Service Worker) - solo acelera la recuperacion al volver a abrir la app.
+  useEffect(() => {
+    if (!online) return
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') pingNow()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [online, pingNow])
 
   const handleToggleOnline = async () => {
     if (online) {
@@ -381,6 +414,17 @@ export default function DriverHome() {
     user?.driverId ? `/topic/driver/${user.driverId}/offers` : null,
     (payload) => {
       if (payload.closed) {
+        if (payload.reason === 'CANCELLED_BY_PASSENGER') {
+          // No se quita de inmediato: se deja ver "viaje cancelado" un rato para que el operador
+          // no se quede con la duda de por que ya no puede aceptarla (antes solo desaparecia en
+          // silencio, igual que cuando otro operador se la gana - pero esto es un caso distinto y
+          // vale la pena que lo sepa).
+          setOffers((current) => current.map((o) => (o.offerId === payload.offerId ? { ...o, cancelledByPassenger: true } : o)))
+          setTimeout(() => {
+            setOffers((current) => current.filter((o) => o.offerId !== payload.offerId))
+          }, 60000)
+          return
+        }
         setOffers((current) => current.filter((o) => o.offerId !== payload.offerId))
         return
       }
@@ -682,12 +726,26 @@ export default function DriverHome() {
       <div className="space-y-5">
         <NotificationPermissionBanner permission={notifPermission} onRequest={requestNotifPermission} />
         {!activeTrip && !finishedTrip && <PaymentDueCard info={paymentInfo} />}
-        {!activeTrip && !finishedTrip && offers.length > 0 && (() => {
+        {!activeTrip &&
+          !finishedTrip &&
+          offers
+            .filter((o) => o.cancelledByPassenger)
+            .map((o) => (
+              <Card key={o.offerId} className="border-2 border-red-200 bg-red-50/40">
+                <div className="flex items-center gap-2">
+                  <XCircle className="h-4 w-4 shrink-0 text-red-600" />
+                  <p className="text-sm font-semibold text-red-700">Viaje cancelado por el pasajero</p>
+                </div>
+                <p className="mt-1 text-xs text-ink-500">{o.originAddress}</p>
+              </Card>
+            ))}
+        {!activeTrip && !finishedTrip && offers.filter((o) => !o.cancelledByPassenger).length > 0 && (() => {
           // Se muestra solo la mas urgente (la primera que llego expira primero, todas comparten
           // la misma vigencia) con un contador de las demas, en vez de apilarlas todas - si se
           // rechaza esta, la siguiente toma su lugar sola. Va primero en la pantalla (antes que
           // bienvenida/estado/estadisticas) para que no se tenga que hacer scroll para verla.
-          const offer = offers[0]
+          const activeOffers = offers.filter((o) => !o.cancelledByPassenger)
+          const offer = activeOffers[0]
           return (
             <Card className="relative overflow-hidden border-2 border-brand-500 bg-brand-50/40 animate-fade-in-up">
               <div className="absolute inset-x-0 top-0 h-1 bg-brand-500" />
@@ -695,9 +753,9 @@ export default function DriverHome() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Badge tone="brand">Nueva solicitud</Badge>
                   {offer.wasScheduled && <Badge tone="info">Programado</Badge>}
-                  {offers.length > 1 && <Badge tone="neutral">+{offers.length - 1} más</Badge>}
+                  {activeOffers.length > 1 && <Badge tone="neutral">+{activeOffers.length - 1} más</Badge>}
                 </div>
-                <span className="text-sm font-bold text-ink-900">${offer.estimatedFare} MXN</span>
+                <span className="text-sm font-bold text-ink-900">${totalToCharge(offer.estimatedFare, offer.passengerServiceFee)} MXN</span>
               </div>
               <div className="space-y-1.5 text-sm text-ink-700">
                 <p className="flex items-center gap-2">
@@ -716,6 +774,12 @@ export default function DriverHome() {
                 </span>
                 <span>&middot;</span>
                 <span>a {offer.driverDistanceKm} km de ti</span>
+                {Number(offer.passengerServiceFee) > 0 && (
+                  <>
+                    <span>&middot;</span>
+                    <span>incluye ${offer.passengerServiceFee} de servicio</span>
+                  </>
+                )}
               </div>
               {(offer.babySeat || offer.moreThanFourPassengers || offer.hasPet || offer.comments) && (
                 <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
@@ -902,7 +966,9 @@ export default function DriverHome() {
         {activeTrip && (
           <>
             <MapView
-              origin={{ lat: activeTrip.originLat, lng: activeTrip.originLng }}
+              // Igual que en PassengerHome: una vez IN_PROGRESS ya no tiene caso mostrar el punto
+              // de recogida (ya se recogio al pasajero), solo el taxi yendo hacia el destino.
+              origin={activeTrip.status === 'IN_PROGRESS' ? null : { lat: activeTrip.originLat, lng: activeTrip.originLng }}
               destination={{ lat: activeTrip.destinationLat, lng: activeTrip.destinationLng }}
               driver={position ? { lat: position.lat, lng: position.lng } : null}
               routeGeometry={activeTrip.routeGeometry}
@@ -915,8 +981,11 @@ export default function DriverHome() {
               </div>
               <div className="flex items-center justify-between border-t border-ink-100 pt-4">
                 <Badge tone={STATUS_COPY[activeTrip.status]?.tone}>{STATUS_COPY[activeTrip.status]?.label}</Badge>
-                <span className="text-sm font-bold text-ink-900">${activeTrip.estimatedFare} MXN</span>
+                <span className="text-sm font-bold text-ink-900">${totalToCharge(activeTrip.estimatedFare, activeTrip.passengerServiceFee)} MXN</span>
               </div>
+              {Number(activeTrip.passengerServiceFee) > 0 && activeTrip.paymentMethod === 'CASH' && (
+                <p className="mt-1 text-xs text-ink-500">Incluye ${activeTrip.passengerServiceFee} de servicio - cóbraselo junto con la tarifa.</p>
+              )}
 
               <div className="mt-3 flex items-center gap-3 rounded-xl bg-ink-50 p-3">
                 {activeTrip.passengerPhotoUrl ? (
@@ -1004,7 +1073,11 @@ export default function DriverHome() {
             <Card>
               <div className="flex items-center justify-between">
                 <Badge tone={STATUS_COPY[finishedTrip.status]?.tone}>{STATUS_COPY[finishedTrip.status]?.label}</Badge>
-                {finishedTrip.status === 'COMPLETED' && <span className="text-lg font-bold text-ink-900">${finishedTrip.estimatedFare} MXN</span>}
+                {finishedTrip.status === 'COMPLETED' && (
+                  <span className="text-lg font-bold text-ink-900">
+                    ${totalToCharge(finishedTrip.estimatedFare, finishedTrip.passengerServiceFee)} MXN
+                  </span>
+                )}
               </div>
               {finishedTrip.status === 'COMPLETED' && finishedTrip.paymentMethod === 'TRANSFER' && !finishedTrip.paymentConfirmed && (
                 <Button variant="outline" onClick={handleConfirmPayment} className="mt-4 w-full">

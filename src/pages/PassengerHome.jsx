@@ -1041,7 +1041,10 @@ export default function PassengerHome() {
         {activeTrip && (
           <>
             <MapView
-              origin={origin}
+              // Una vez que el viaje ya inicio (el pasajero ya subio), el punto de origen deja de
+              // ser relevante - mostrarlo junto al taxi (que ahora va camino al destino, no al
+              // origen) solo confunde, asi que se oculta y el mapa se centra en taxi+destino.
+              origin={activeTrip.status === 'IN_PROGRESS' ? null : origin}
               destination={destination}
               driver={mapDriver}
               routeGeometry={activeTrip.routeGeometry}
@@ -1063,6 +1066,15 @@ export default function PassengerHome() {
                 {activeTrip.paymentMethod === 'CASH' ? 'Efectivo' : 'Transferencia'}
                 {Number(activeTrip.passengerServiceFee) > 0 && ` · incluye $${activeTrip.passengerServiceFee} de servicio`}
               </p>
+
+              {activeTrip.status === 'ACCEPTED' && verificationCode && (
+                <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-50 px-3 py-2.5 text-amber-900">
+                  <span className="flex items-center gap-2 text-xs font-medium text-brand-800">
+                    <KeyRound className="h-3.5 w-3.5 shrink-0" /> Dile este código al operador al subir
+                  </span>
+                  <span className="text-lg font-bold tracking-[0.3em] text-brand-900">{verificationCode}</span>
+                </div>
+              )}
 
               {activeTrip.paymentMethod === 'TRANSFER' && activeTrip.driverBankAccount && (
                 <div className="mt-2 flex items-center gap-2 rounded-xl bg-ink-50 px-3 py-2.5 text-xs text-ink-700">
@@ -1140,14 +1152,6 @@ export default function PassengerHome() {
                       </button>
                     )}
                   </div>
-                </div>
-              )}
-              {activeTrip.status === 'ACCEPTED' && verificationCode && (
-                <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-50 px-3 py-2.5 text-amber-900">
-                  <span className="flex items-center gap-2 text-xs font-medium text-brand-800">
-                    <KeyRound className="h-3.5 w-3.5 shrink-0" /> Dile este código al operador al subir
-                  </span>
-                  <span className="text-lg font-bold tracking-[0.3em] text-brand-900">{verificationCode}</span>
                 </div>
               )}
               {activeTrip.driverName && (

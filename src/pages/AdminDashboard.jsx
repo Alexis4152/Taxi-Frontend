@@ -1740,14 +1740,14 @@ function PlatformSettingsSection() {
               <Input
                 type="number"
                 min={10}
-                max={2000}
+                max={5000}
                 required
                 value={radius}
                 onChange={(e) => setRadius(e.target.value)}
               />
               <p className="mt-1.5 text-[11px] text-ink-400">
                 Que tan cerca debe estar el operador del punto de recogida (para iniciar) o del destino (para
-                finalizar). Entre 10 y 2000 metros. Aplica a todas las organizaciones.
+                finalizar). Entre 10 y 5000 metros. Aplica a todas las organizaciones.
               </p>
             </div>
             <div>
@@ -1802,10 +1802,12 @@ function PlatformSettingsSection() {
               <div>
                 <Label>Cobro al operador</Label>
                 <div className="flex gap-2">
-                  <Select value={operatorFeeType} onChange={(e) => setOperatorFeeType(e.target.value)} className="w-28 shrink-0">
-                    <option value="FIXED">$ fijo</option>
-                    <option value="PERCENT">%</option>
-                  </Select>
+                  <div className="w-28 shrink-0">
+                    <Select value={operatorFeeType} onChange={(e) => setOperatorFeeType(e.target.value)}>
+                      <option value="FIXED">$ fijo</option>
+                      <option value="PERCENT">%</option>
+                    </Select>
+                  </div>
                   <div className="min-w-0 flex-1">
                     <Input
                       type="number"
@@ -1821,10 +1823,12 @@ function PlatformSettingsSection() {
               <div>
                 <Label>Cobro al pasajero</Label>
                 <div className="flex gap-2">
-                  <Select value={passengerFeeType} onChange={(e) => setPassengerFeeType(e.target.value)} className="w-28 shrink-0">
-                    <option value="FIXED">$ fijo</option>
-                    <option value="PERCENT">%</option>
-                  </Select>
+                  <div className="w-28 shrink-0">
+                    <Select value={passengerFeeType} onChange={(e) => setPassengerFeeType(e.target.value)}>
+                      <option value="FIXED">$ fijo</option>
+                      <option value="PERCENT">%</option>
+                    </Select>
+                  </div>
                   <div className="min-w-0 flex-1">
                     <Input
                       type="number"

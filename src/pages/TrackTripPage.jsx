@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { MapPin, Flag, AlertCircle, Car } from 'lucide-react'
+import { MapPin, Flag, AlertCircle, Car, ShieldCheck, AlertTriangle } from 'lucide-react'
 import { getPublicTrip } from '../api/trips'
 import Logo from '../components/ui/Logo'
 import Card from '../components/ui/Card'
@@ -63,7 +63,9 @@ export default function TrackTripPage() {
   }
 
   const driver = trip.driverLat != null && trip.driverLng != null ? { lat: trip.driverLat, lng: trip.driverLng } : null
-  const origin = { lat: trip.originLat, lng: trip.originLng }
+  // Una vez en curso, el punto de recogida ya no importa (ya se recogio al pasajero) - se oculta
+  // para que el mapa se centre en el taxi yendo hacia el destino, igual que en la app.
+  const origin = trip.status === 'IN_PROGRESS' ? null : { lat: trip.originLat, lng: trip.originLng }
   const destination = { lat: trip.destinationLat, lng: trip.destinationLng }
 
   return (
@@ -76,6 +78,20 @@ export default function TrackTripPage() {
 
         <Card padded={false} className="space-y-4 p-4">
           <TripStatusStepper status={trip.status} />
+
+          {trip.status === 'COMPLETED' && (
+            <div className="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              Tu conocido llegó a su destino de forma segura.
+            </div>
+          )}
+
+          {trip.hasReport && (
+            <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              Se reportó un problema en este viaje. Un administrador lo está revisando.
+            </div>
+          )}
 
           <MapView origin={origin} destination={destination} driver={driver} routeGeometry={trip.routeGeometry} height="260px" />
 
