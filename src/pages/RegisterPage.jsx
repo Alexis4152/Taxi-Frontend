@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { User, Phone, Mail, Lock, AlertCircle, Car, UserRound, Hash, Gift } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import BrandPanel from '../components/ui/BrandPanel'
@@ -27,9 +27,13 @@ const emptyForm = {
 export default function RegisterPage() {
   const { register, registerDriver, logout } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [role, setRole] = useState('PASSENGER')
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState(() => {
+    const ref = searchParams.get('ref')
+    return ref ? { ...emptyForm, referralCode: ref.toUpperCase() } : emptyForm
+  })
   const [brandChoice, setBrandChoice] = useState('')
   const [modelChoice, setModelChoice] = useState('')
   const [photo, setPhoto] = useState(null)

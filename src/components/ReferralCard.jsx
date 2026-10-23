@@ -14,7 +14,8 @@ export default function ReferralCard() {
   if (!info) return null
 
   const handleShare = async () => {
-    const text = `Únete a NexoraTaxis con mi código ${info.code} y pide tu taxi en minutos.`
+    const link = `${window.location.origin}/register?ref=${info.code}`
+    const text = `Únete a NexoraTaxis con mi código ${info.code} y pide tu taxi en minutos.\n${link}`
     if (navigator.share) {
       try {
         await navigator.share({ title: 'NexoraTaxis', text })

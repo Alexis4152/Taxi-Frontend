@@ -8,7 +8,6 @@ import {
   Plus,
   AlertCircle,
   CheckCircle2,
-  Ban,
   Star,
   Phone,
   Mail,
@@ -26,6 +25,8 @@ import {
   SlidersHorizontal,
   Gift,
   UserPlus,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import Card, { CardHeader } from '../components/ui/Card'
@@ -170,13 +171,45 @@ function ListRow({ avatar, title, subtitle, right, onClick, className = '' }) {
   )
 }
 
-function ToggleBadge({ active, onClick, activeLabel = 'Activo', inactiveLabel = 'Baja' }) {
+const iconActionClass = 'flex h-8 w-8 items-center justify-center rounded-lg transition-colors'
+
+/**
+ * Botones de accion de una fila (estilo POS: editar / bloquear-desbloquear / eliminar). Mientras
+ * esta "pendiente de eliminacion" se reemplaza el boton de eliminar por restaurar + borrar
+ * definitivo, y se deshabilita el de bloquear (no tiene sentido tocarlo en ese estado).
+ */
+function RowActions({ active, pendingDeletion, onEdit, onToggleActive, onRequestDelete, onCancelDelete, onDeleteForever }) {
   return (
-    <button onClick={onClick}>
-      <Badge tone={active ? 'success' : 'neutral'} icon={active ? CheckCircle2 : Ban}>
-        {active ? activeLabel : inactiveLabel}
-      </Badge>
-    </button>
+    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {onEdit && (
+        <button type="button" title="Modificar" onClick={onEdit} className={`${iconActionClass} bg-blue-50 text-blue-600 hover:bg-blue-100`}>
+          <Pencil className="h-4 w-4" />
+        </button>
+      )}
+      <button
+        type="button"
+        title={pendingDeletion ? 'Bloquear/desbloquear (deshabilitado)' : active ? 'Bloquear' : 'Desbloquear'}
+        onClick={pendingDeletion ? undefined : onToggleActive}
+        disabled={pendingDeletion}
+        className={`${iconActionClass} ${pendingDeletion ? 'cursor-not-allowed bg-ink-50 text-ink-300' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
+      >
+        <AlertTriangle className="h-4 w-4" />
+      </button>
+      {pendingDeletion ? (
+        <>
+          <button type="button" title="Cancelar eliminación" onClick={onCancelDelete} className={`${iconActionClass} bg-amber-50 text-amber-600 hover:bg-amber-100`}>
+            <RotateCcw className="h-4 w-4" />
+          </button>
+          <button type="button" title="Eliminar definitivamente" onClick={onDeleteForever} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100`}>
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </>
+      ) : (
+        <button type="button" title="Eliminar" onClick={onRequestDelete} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100`}>
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -215,6 +248,8 @@ function OrganizationsSection({ onChange }) {
   const handleCreate = async (e) => {
     e.preventDefault()
     setError('')
+    const ok = await confirm({ title: 'Crear organización', message: `Se dará de alta "${name}". ¿Continuar?`, confirmLabel: 'Crear' })
+    if (!ok) return
     try {
       await adminApi.createOrganization({ name, contactPhone: contactPhone || null })
       setName('')
@@ -226,17 +261,72 @@ function OrganizationsSection({ onChange }) {
   }
 
   const toggleActive = async (org) => {
+    if (org.active) {
+      const reason = await confirm({
+        title: 'Bloquear organización',
+        message: `${org.name} y todo su equipo perderán acceso a la plataforma. El motivo quedará visible para revisión.`,
+        danger: true,
+        confirmLabel: 'Bloquear',
+        requireInput: true,
+        inputLabel: 'Motivo (opcional)',
+        inputPlaceholder: 'Ej. Falta de pago, contrato terminado, etc.',
+      })
+      if (reason === null) return
+      await adminApi.setOrganizationActive(org.id, false, reason)
+      load()
+      return
+    }
     const ok = await confirm({
-      title: org.active ? 'Dar de baja organización' : 'Reactivar organización',
-      message: org.active
-        ? `${org.name} y todo su equipo perderán acceso a la plataforma. ¿Continuar?`
-        : `${org.name} y su equipo recuperarán acceso a la plataforma. ¿Continuar?`,
-      danger: org.active,
-      confirmLabel: org.active ? 'Dar de baja' : 'Reactivar',
+      title: 'Desbloquear organización',
+      message: `${org.name} y su equipo recuperarán acceso a la plataforma. ¿Continuar?`,
+      confirmLabel: 'Desbloquear',
     })
     if (!ok) return
-    await adminApi.setOrganizationActive(org.id, !org.active)
+    await adminApi.setOrganizationActive(org.id, true)
     load()
+  }
+
+  const requestDelete = async (org) => {
+    const reason = await confirm({
+      title: 'Eliminar organización',
+      message: `${org.name} quedará bloqueada y marcada como pendiente de eliminación para que la revises antes de borrarla de forma definitiva.`,
+      danger: true,
+      confirmLabel: 'Marcar para eliminar',
+      requireInput: true,
+      inputLabel: 'Motivo (opcional)',
+      inputPlaceholder: 'Ej. Organización dada de baja, duplicada, etc.',
+    })
+    if (reason === null) return
+    await adminApi.markOrganizationPendingDeletion(org.id, reason)
+    load()
+  }
+
+  const cancelDelete = async (org) => {
+    const ok = await confirm({
+      title: 'Cancelar eliminación',
+      message: `Se quitará a ${org.name} de la lista de pendientes de eliminación. Seguirá bloqueada hasta que la desbloquees.`,
+      confirmLabel: 'Cancelar eliminación',
+    })
+    if (!ok) return
+    await adminApi.cancelOrganizationPendingDeletion(org.id)
+    load()
+  }
+
+  const deleteForever = async (org) => {
+    const ok = await confirm({
+      title: 'Eliminar definitivamente',
+      message: `Esta acción no se puede deshacer: se borrarán de forma permanente los datos de ${org.name}. Si tiene operadores, taxis u otros registros asociados, la eliminación se rechazará y seguirá pendiente.`,
+      danger: true,
+      confirmLabel: 'Eliminar para siempre',
+    })
+    if (!ok) return
+    setError('')
+    try {
+      await adminApi.deleteOrganizationPermanently(org.id)
+      load()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo eliminar')
+    }
   }
 
   return (
@@ -263,7 +353,7 @@ function OrganizationsSection({ onChange }) {
               <p className="truncate text-sm font-semibold text-ink-900">{o.name}</p>
               <p className="truncate text-xs text-ink-500">{o.contactPhone || 'Sin teléfono'}</p>
             </div>
-            <Badge tone={o.active ? 'success' : 'neutral'}>{o.active ? 'Activa' : 'Baja'}</Badge>
+            <Badge tone={o.active ? 'success' : 'neutral'}>{o.active ? 'Activa' : 'Bloqueada'}</Badge>
           </button>
         )}
       />
@@ -283,6 +373,15 @@ function OrganizationsSection({ onChange }) {
           tone="success"
           onClick={() => setListModal({ title: 'Organizaciones activas', items: orgs.filter((o) => o.active) })}
         />
+        {orgs.some((o) => o.pendingDeletion) && (
+          <StatCard
+            icon={Trash2}
+            label="Solicitudes de eliminación"
+            value={orgs.filter((o) => o.pendingDeletion).length}
+            tone="danger"
+            onClick={() => setListModal({ title: 'Pendientes de eliminación', items: orgs.filter((o) => o.pendingDeletion) })}
+          />
+        )}
       </div>
 
       <Card>
@@ -320,8 +419,37 @@ function OrganizationsSection({ onChange }) {
               onClick={() => setDetail(org)}
               avatar={<Avatar url={org.logoUrl} icon={Building2} rounded="rounded-xl" />}
               title={org.name}
-              subtitle={org.contactPhone || 'Sin teléfono'}
-              right={<ToggleBadge active={org.active} onClick={() => toggleActive(org)} />}
+              subtitle={
+                <>
+                  {org.contactPhone || 'Sin teléfono'}
+                  {!org.active && org.deactivationReason && (
+                    <>
+                      {' · '}
+                      <span className="font-medium text-red-600">Motivo: {org.deactivationReason}</span>
+                    </>
+                  )}
+                </>
+              }
+              right={
+                org.independentPool ? (
+                  <Badge tone="brand">Pool del sistema</Badge>
+                ) : (
+                  <>
+                    <Badge tone={org.pendingDeletion ? 'danger' : org.active ? 'success' : 'neutral'}>
+                      {org.pendingDeletion ? 'Pend. eliminación' : org.active ? 'Activa' : 'Bloqueada'}
+                    </Badge>
+                    <RowActions
+                      active={org.active}
+                      pendingDeletion={org.pendingDeletion}
+                      onEdit={() => setDetail(org)}
+                      onToggleActive={() => toggleActive(org)}
+                      onRequestDelete={() => requestDelete(org)}
+                      onCancelDelete={() => cancelDelete(org)}
+                      onDeleteForever={() => deleteForever(org)}
+                    />
+                  </>
+                )
+              }
             />
           ))
         )}
@@ -340,6 +468,7 @@ function OrganizationDetailModal({ org, onClose, onSaved }) {
   const [orgTaxis, setOrgTaxis] = useState(null)
   const [driverDetailId, setDriverDetailId] = useState(null)
   const [taxiDetailId, setTaxiDetailId] = useState(null)
+  const { confirm, ConfirmDialogElement } = useConfirm()
 
   useEffect(() => {
     adminApi.listDrivers().then(({ data }) => setOrgDrivers(data.data.filter((d) => d.organizationId === org.id)))
@@ -349,6 +478,8 @@ function OrganizationDetailModal({ org, onClose, onSaved }) {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    const ok = await confirm({ title: 'Guardar cambios', message: `Se actualizarán los datos de ${org.name}. ¿Continuar?`, confirmLabel: 'Guardar' })
+    if (!ok) return
     setSaving(true)
     setError('')
     try {
@@ -365,6 +496,7 @@ function OrganizationDetailModal({ org, onClose, onSaved }) {
 
   return (
     <Modal open onClose={onClose} title={org.name} subtitle="Detalle y edición de la organización" wide>
+      <ConfirmDialogElement />
       {driverDetailId && (
         <DriverDetailModal
           driverId={driverDetailId}
@@ -420,7 +552,7 @@ function OrganizationDetailModal({ org, onClose, onSaved }) {
                     <p className="truncate text-sm font-semibold text-ink-900">{d.name}</p>
                     <p className="truncate text-xs text-ink-500">{d.phone}</p>
                   </div>
-                  <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Activo' : 'Baja'}</Badge>
+                  <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Activo' : 'Bloqueado'}</Badge>
                 </button>
               ))}
             </div>
@@ -447,7 +579,7 @@ function OrganizationDetailModal({ org, onClose, onSaved }) {
                     <p className="truncate text-sm font-semibold text-ink-900">Unidad {t.unitNumber}</p>
                     <p className="truncate text-xs text-ink-500">{t.plates}</p>
                   </div>
-                  <Badge tone={t.active ? 'success' : 'neutral'}>{t.active ? 'Activo' : 'Baja'}</Badge>
+                  <Badge tone={t.active ? 'success' : 'neutral'}>{t.active ? 'Activo' : 'Bloqueado'}</Badge>
                 </button>
               ))}
             </div>
@@ -573,22 +705,78 @@ function DriversSection({ orgId, isSuperAdmin }) {
   }
 
   const toggleActive = async (driver) => {
+    if (driver.active) {
+      const reason = await confirm({
+        title: 'Bloquear operador',
+        message: `${driver.name} ya no podrá iniciar sesión ni recibir viajes. El motivo se le mostrará al intentar entrar.`,
+        danger: true,
+        confirmLabel: 'Bloquear',
+        requireInput: true,
+        inputLabel: 'Motivo (se le mostrará al operador)',
+        inputPlaceholder: 'Ej. Documentación vencida, quejas reiteradas, etc.',
+      })
+      if (reason === null) return
+      await adminApi.setDriverActive(driver.driverId, false, reason)
+      load()
+      return
+    }
     const ok = await confirm({
-      title: driver.active ? 'Dar de baja operador' : 'Reactivar operador',
-      message: driver.active
-        ? `${driver.name} ya no podrá iniciar sesión ni recibir viajes. ¿Continuar?`
-        : `${driver.name} podrá volver a iniciar sesión y recibir viajes. ¿Continuar?`,
-      danger: driver.active,
-      confirmLabel: driver.active ? 'Dar de baja' : 'Reactivar',
+      title: 'Desbloquear operador',
+      message: `${driver.name} podrá volver a iniciar sesión y recibir viajes. ¿Continuar?`,
+      confirmLabel: 'Desbloquear',
     })
     if (!ok) return
-    await adminApi.setDriverActive(driver.driverId, !driver.active)
+    await adminApi.setDriverActive(driver.driverId, true)
     load()
+  }
+
+  const requestDelete = async (driver) => {
+    const reason = await confirm({
+      title: 'Eliminar operador',
+      message: `${driver.name} quedará bloqueado y marcado como pendiente de eliminación para que lo revises antes de borrarlo de forma definitiva.`,
+      danger: true,
+      confirmLabel: 'Marcar para eliminar',
+      requireInput: true,
+      inputLabel: 'Motivo (opcional)',
+      inputPlaceholder: 'Ej. Cuenta duplicada, solicitó baja, etc.',
+    })
+    if (reason === null) return
+    await adminApi.markDriverPendingDeletion(driver.driverId, reason)
+    load()
+  }
+
+  const cancelDelete = async (driver) => {
+    const ok = await confirm({
+      title: 'Cancelar eliminación',
+      message: `Se quitará a ${driver.name} de la lista de pendientes de eliminación. Seguirá bloqueado hasta que lo desbloquees.`,
+      confirmLabel: 'Cancelar eliminación',
+    })
+    if (!ok) return
+    await adminApi.cancelDriverPendingDeletion(driver.driverId)
+    load()
+  }
+
+  const deleteForever = async (driver) => {
+    const ok = await confirm({
+      title: 'Eliminar definitivamente',
+      message: `Esta acción no se puede deshacer: se borrarán de forma permanente los datos de ${driver.name}. Si tiene viajes u otros registros asociados, la eliminación se rechazará y seguirá pendiente.`,
+      danger: true,
+      confirmLabel: 'Eliminar para siempre',
+    })
+    if (!ok) return
+    setError('')
+    try {
+      await adminApi.deleteDriverPermanently(driver.driverId)
+      load()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo eliminar')
+    }
   }
 
   return (
     <div className="space-y-5">
       <ConfirmDialogElement />
+      {!showCreate && error && <AlertBox>{error}</AlertBox>}
       {detailId && <DriverDetailModal driverId={detailId} tripsToday={detailTripsToday} onClose={closeDetail} onSaved={load} />}
       <DetailListModal
         open={Boolean(listModal)}
@@ -615,7 +803,7 @@ function DriversSection({ orgId, isSuperAdmin }) {
             </div>
             <div className="flex flex-col items-end gap-1">
               {d.active !== undefined ? (
-                <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Activo' : 'Baja'}</Badge>
+                <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Activo' : 'Bloqueado'}</Badge>
               ) : (
                 <Badge tone={d.onTrip ? 'info' : 'success'}>{d.onTrip ? 'En viaje' : 'En línea'}</Badge>
               )}
@@ -655,6 +843,15 @@ function DriversSection({ orgId, isSuperAdmin }) {
           tone="danger"
           onClick={() => setListModal({ title: 'Pagos pendientes', items: drivers.filter((d) => Number(d.pendingAmount) > 0) })}
         />
+        {drivers.some((d) => d.pendingDeletion) && (
+          <StatCard
+            icon={Trash2}
+            label="Solicitudes de eliminación"
+            value={drivers.filter((d) => d.pendingDeletion).length}
+            tone="danger"
+            onClick={() => setListModal({ title: 'Pendientes de eliminación', items: drivers.filter((d) => d.pendingDeletion) })}
+          />
+        )}
       </div>
 
       <Card padded={false}>
@@ -781,6 +978,12 @@ function DriversSection({ orgId, isSuperAdmin }) {
                     <span className={lowRated ? 'font-semibold text-red-600' : ''}>
                       {d.ratingAvg}★ ({d.ratingCount})
                     </span>
+                    {!d.active && d.deactivationReason && (
+                      <>
+                        {' · '}
+                        <span className="font-medium text-red-600">Motivo: {d.deactivationReason}</span>
+                      </>
+                    )}
                   </>
                 }
                 right={
@@ -790,7 +993,18 @@ function DriversSection({ orgId, isSuperAdmin }) {
                         Top {rank + 1}
                       </Badge>
                     )}
-                    <ToggleBadge active={d.active} onClick={() => toggleActive(d)} />
+                    <Badge tone={d.pendingDeletion ? 'danger' : d.active ? 'success' : 'neutral'}>
+                      {d.pendingDeletion ? 'Pend. eliminación' : d.active ? 'Activo' : 'Bloqueado'}
+                    </Badge>
+                    <RowActions
+                      active={d.active}
+                      pendingDeletion={d.pendingDeletion}
+                      onEdit={() => openDetail(d.driverId)}
+                      onToggleActive={() => toggleActive(d)}
+                      onRequestDelete={() => requestDelete(d)}
+                      onCancelDelete={() => cancelDelete(d)}
+                      onDeleteForever={() => deleteForever(d)}
+                    />
                   </>
                 }
               />
@@ -867,6 +1081,8 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    const ok = await confirm({ title: 'Guardar cambios', message: `Se actualizarán los datos de ${form.name}. ¿Continuar?`, confirmLabel: 'Guardar' })
+    if (!ok) return
     setSaving(true)
     setError('')
     try {
@@ -1096,22 +1312,78 @@ function TaxisSection({ orgId, isSuperAdmin }) {
   }
 
   const toggleActive = async (taxi) => {
+    if (taxi.active) {
+      const reason = await confirm({
+        title: 'Bloquear taxi',
+        message: `La unidad ${taxi.unitNumber} dejará de poder recibir viajes y turnos. El motivo se le mostrará al operador asignado.`,
+        danger: true,
+        confirmLabel: 'Bloquear',
+        requireInput: true,
+        inputLabel: 'Motivo (se le mostrará al operador asignado)',
+        inputPlaceholder: 'Ej. Mantenimiento, verificación vencida, etc.',
+      })
+      if (reason === null) return
+      await adminApi.setTaxiActive(taxi.id, false, reason)
+      load()
+      return
+    }
     const ok = await confirm({
-      title: taxi.active ? 'Dar de baja taxi' : 'Reactivar taxi',
-      message: taxi.active
-        ? `La unidad ${taxi.unitNumber} dejará de poder recibir viajes y turnos. ¿Continuar?`
-        : `La unidad ${taxi.unitNumber} podrá volver a recibir viajes y turnos. ¿Continuar?`,
-      danger: taxi.active,
-      confirmLabel: taxi.active ? 'Dar de baja' : 'Reactivar',
+      title: 'Desbloquear taxi',
+      message: `La unidad ${taxi.unitNumber} podrá volver a recibir viajes y turnos. ¿Continuar?`,
+      confirmLabel: 'Desbloquear',
     })
     if (!ok) return
-    await adminApi.setTaxiActive(taxi.id, !taxi.active)
+    await adminApi.setTaxiActive(taxi.id, true)
     load()
+  }
+
+  const requestDelete = async (taxi) => {
+    const reason = await confirm({
+      title: 'Eliminar taxi',
+      message: `La unidad ${taxi.unitNumber} quedará bloqueada y marcada como pendiente de eliminación para que la revises antes de borrarla de forma definitiva.`,
+      danger: true,
+      confirmLabel: 'Marcar para eliminar',
+      requireInput: true,
+      inputLabel: 'Motivo (opcional)',
+      inputPlaceholder: 'Ej. Unidad dada de baja de la flotilla, duplicada, etc.',
+    })
+    if (reason === null) return
+    await adminApi.markTaxiPendingDeletion(taxi.id, reason)
+    load()
+  }
+
+  const cancelDelete = async (taxi) => {
+    const ok = await confirm({
+      title: 'Cancelar eliminación',
+      message: `Se quitará la unidad ${taxi.unitNumber} de la lista de pendientes de eliminación. Seguirá bloqueada hasta que la desbloquees.`,
+      confirmLabel: 'Cancelar eliminación',
+    })
+    if (!ok) return
+    await adminApi.cancelTaxiPendingDeletion(taxi.id)
+    load()
+  }
+
+  const deleteForever = async (taxi) => {
+    const ok = await confirm({
+      title: 'Eliminar definitivamente',
+      message: `Esta acción no se puede deshacer: se borrarán de forma permanente los datos de la unidad ${taxi.unitNumber}. Si tiene operadores vinculados, viajes u otros registros asociados, la eliminación se rechazará y seguirá pendiente.`,
+      danger: true,
+      confirmLabel: 'Eliminar para siempre',
+    })
+    if (!ok) return
+    setError('')
+    try {
+      await adminApi.deleteTaxiPermanently(taxi.id)
+      load()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo eliminar')
+    }
   }
 
   return (
     <div className="space-y-5">
       <ConfirmDialogElement />
+      {!showCreate && error && <AlertBox>{error}</AlertBox>}
       {detailId && <TaxiDetailModal taxiId={detailId} onClose={() => setDetailId(null)} onSaved={load} />}
       <DetailListModal
         open={Boolean(listModal)}
@@ -1136,7 +1408,7 @@ function TaxisSection({ orgId, isSuperAdmin }) {
                 {isSuperAdmin && !orgId && t.organizationName && ` · ${t.organizationName}`}
               </p>
             </div>
-            <Badge tone={t.active ? 'success' : 'neutral'}>{t.active ? 'Activo' : 'Baja'}</Badge>
+            <Badge tone={t.active ? 'success' : 'neutral'}>{t.active ? 'Activo' : 'Bloqueado'}</Badge>
           </button>
         )}
       />
@@ -1150,6 +1422,15 @@ function TaxisSection({ orgId, isSuperAdmin }) {
           tone="success"
           onClick={() => setListModal({ title: 'Taxis activos', items: taxis.filter((t) => t.active) })}
         />
+        {taxis.some((t) => t.pendingDeletion) && (
+          <StatCard
+            icon={Trash2}
+            label="Solicitudes de eliminación"
+            value={taxis.filter((t) => t.pendingDeletion).length}
+            tone="danger"
+            onClick={() => setListModal({ title: 'Pendientes de eliminación', items: taxis.filter((t) => t.pendingDeletion) })}
+          />
+        )}
       </div>
 
       {!showCreate ? (
@@ -1226,9 +1507,30 @@ function TaxisSection({ orgId, isSuperAdmin }) {
                     {isSuperAdmin && !orgId && t.organizationName && ` · ${t.organizationName}`}
                     <br />
                     <span className={taxiDrivers.length === 0 ? 'text-ink-400' : ''}>{operatorsLabel}</span>
+                    {!t.active && t.deactivationReason && (
+                      <>
+                        <br />
+                        <span className="font-medium text-red-600">Motivo: {t.deactivationReason}</span>
+                      </>
+                    )}
                   </>
                 }
-                right={<ToggleBadge active={t.active} onClick={() => toggleActive(t)} />}
+                right={
+                  <>
+                    <Badge tone={t.pendingDeletion ? 'danger' : t.active ? 'success' : 'neutral'}>
+                      {t.pendingDeletion ? 'Pend. eliminación' : t.active ? 'Activo' : 'Bloqueado'}
+                    </Badge>
+                    <RowActions
+                      active={t.active}
+                      pendingDeletion={t.pendingDeletion}
+                      onEdit={() => setDetailId(t.id)}
+                      onToggleActive={() => toggleActive(t)}
+                      onRequestDelete={() => requestDelete(t)}
+                      onCancelDelete={() => cancelDelete(t)}
+                      onDeleteForever={() => deleteForever(t)}
+                    />
+                  </>
+                }
               />
             )
           })
@@ -1245,6 +1547,7 @@ function TaxiDetailModal({ taxiId, onClose, onSaved }) {
   const [photo, setPhoto] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const { confirm, ConfirmDialogElement } = useConfirm()
 
   useEffect(() => {
     adminApi.getTaxi(taxiId).then(({ data }) => {
@@ -1262,6 +1565,8 @@ function TaxiDetailModal({ taxiId, onClose, onSaved }) {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    const ok = await confirm({ title: 'Guardar cambios', message: `Se actualizarán los datos de la unidad ${form.unitNumber}. ¿Continuar?`, confirmLabel: 'Guardar' })
+    if (!ok) return
     setSaving(true)
     setError('')
     try {
@@ -1286,6 +1591,7 @@ function TaxiDetailModal({ taxiId, onClose, onSaved }) {
 
   return (
     <Modal open onClose={onClose} title={`Unidad ${taxi.unitNumber}`} subtitle={taxi.organizationName} wide>
+      <ConfirmDialogElement />
       <form onSubmit={handleSave} className="space-y-4">
         <PhotoPicker value={photo} onChange={setPhoto} existingUrl={photoSrc(taxi.photoUrl)} rounded="rounded-xl" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1329,7 +1635,7 @@ function TaxiDetailModal({ taxiId, onClose, onSaved }) {
                   <p className="font-medium text-ink-800">{d.name}</p>
                   <p className="text-ink-400">{d.phone}</p>
                 </div>
-                <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Activo' : 'Baja'}</Badge>
+                <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Activo' : 'Bloqueado'}</Badge>
               </div>
             ))}
           </div>
@@ -1476,8 +1782,15 @@ function TripReportDetailModal({ report, onClose, onResolved }) {
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const { confirm, ConfirmDialogElement } = useConfirm()
 
   const handleResolve = async () => {
+    const ok = await confirm({
+      title: 'Marcar reporte como resuelto',
+      message: 'Se notificará por correo al pasajero y al operador con tu comentario. ¿Continuar?',
+      confirmLabel: 'Marcar resuelto',
+    })
+    if (!ok) return
     setSaving(true)
     setError('')
     try {
@@ -1494,6 +1807,7 @@ function TripReportDetailModal({ report, onClose, onResolved }) {
 
   return (
     <Modal open onClose={onClose} title={`${REPORT_CATEGORY_LABEL[report.category] || report.category} · Viaje #${report.tripId}`} wide>
+      <ConfirmDialogElement />
       <div className="space-y-4">
         <div className="rounded-xl bg-ink-50 p-3 text-sm text-ink-700">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-400">
@@ -1665,6 +1979,7 @@ function PlatformSettingsSection() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [referrals, setReferrals] = useState(null)
+  const { confirm, ConfirmDialogElement } = useConfirm()
 
   const applySettings = (s) => {
     setRadius(String(s.tripGeofenceRadiusMeters))
@@ -1690,6 +2005,12 @@ function PlatformSettingsSection() {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    const ok = await confirm({
+      title: 'Guardar configuración',
+      message: 'Estos cambios aplican de inmediato a toda la plataforma (geocerca, tarifas, cobros y plazos de pago). ¿Continuar?',
+      confirmLabel: 'Guardar',
+    })
+    if (!ok) return
     setSaving(true)
     setError('')
     setMessage('')
@@ -1727,6 +2048,7 @@ function PlatformSettingsSection() {
 
   return (
     <div className="space-y-5">
+      <ConfirmDialogElement />
       <form onSubmit={handleSave} className="space-y-5">
         <Card>
           <CardHeader
@@ -1918,9 +2240,16 @@ function TariffsSection({ orgId, isSuperAdmin }) {
   const [form, setForm] = useState({ baseFare: '15.00', perKm: '8.00', minFare: '30.00' })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const { confirm, ConfirmDialogElement } = useConfirm()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const ok = await confirm({
+      title: 'Guardar tarifa',
+      message: 'Esta tarifa se aplicará a los próximos viajes calculados. ¿Continuar?',
+      confirmLabel: 'Guardar',
+    })
+    if (!ok) return
     setError('')
     setMessage('')
     try {
@@ -1940,6 +2269,7 @@ function TariffsSection({ orgId, isSuperAdmin }) {
 
   return (
     <Card className="max-w-md">
+      <ConfirmDialogElement />
       <CardHeader
         icon={Banknote}
         title={isPlatformDefault ? 'Tarifa por defecto de la plataforma' : 'Tarifa de la organización'}
@@ -2147,6 +2477,7 @@ function UsersSection() {
   const [passengers, setPassengers] = useState([])
   const [query, setQuery] = useState('')
   const [listModal, setListModal] = useState(null)
+  const [error, setError] = useState('')
   const { confirm, ConfirmDialogElement } = useConfirm()
 
   const load = () => adminApi.listPassengers().then(({ data }) => setPassengers(data.data))
@@ -2160,22 +2491,78 @@ function UsersSection() {
     : passengers
 
   const toggleActive = async (p) => {
+    if (p.active) {
+      const reason = await confirm({
+        title: 'Bloquear usuario',
+        message: `${p.name} ya no podrá iniciar sesión ni solicitar viajes. El motivo se le mostrará al intentar entrar.`,
+        danger: true,
+        confirmLabel: 'Bloquear',
+        requireInput: true,
+        inputLabel: 'Motivo (se le mostrará al usuario)',
+        inputPlaceholder: 'Ej. Reportes reiterados, fraude, etc.',
+      })
+      if (reason === null) return
+      await adminApi.setPassengerActive(p.passengerId, false, reason)
+      load()
+      return
+    }
     const ok = await confirm({
-      title: p.active ? 'Dar de baja usuario' : 'Reactivar usuario',
-      message: p.active
-        ? `${p.name} ya no podrá iniciar sesión ni solicitar viajes. ¿Continuar?`
-        : `${p.name} podrá volver a iniciar sesión y solicitar viajes. ¿Continuar?`,
-      danger: p.active,
-      confirmLabel: p.active ? 'Dar de baja' : 'Reactivar',
+      title: 'Desbloquear usuario',
+      message: `${p.name} podrá volver a iniciar sesión y solicitar viajes. ¿Continuar?`,
+      confirmLabel: 'Desbloquear',
     })
     if (!ok) return
-    await adminApi.setPassengerActive(p.passengerId, !p.active)
+    await adminApi.setPassengerActive(p.passengerId, true)
     load()
+  }
+
+  const requestDelete = async (p) => {
+    const reason = await confirm({
+      title: 'Eliminar usuario',
+      message: `${p.name} quedará bloqueado y marcado como pendiente de eliminación para que lo revises antes de borrarlo de forma definitiva.`,
+      danger: true,
+      confirmLabel: 'Marcar para eliminar',
+      requireInput: true,
+      inputLabel: 'Motivo (opcional)',
+      inputPlaceholder: 'Ej. Cuenta duplicada, lo solicitó el usuario, etc.',
+    })
+    if (reason === null) return
+    await adminApi.markPassengerPendingDeletion(p.passengerId, reason)
+    load()
+  }
+
+  const cancelDelete = async (p) => {
+    const ok = await confirm({
+      title: 'Cancelar eliminación',
+      message: `Se quitará a ${p.name} de la lista de pendientes de eliminación. Seguirá bloqueado hasta que lo desbloquees.`,
+      confirmLabel: 'Cancelar eliminación',
+    })
+    if (!ok) return
+    await adminApi.cancelPassengerPendingDeletion(p.passengerId)
+    load()
+  }
+
+  const deleteForever = async (p) => {
+    const ok = await confirm({
+      title: 'Eliminar definitivamente',
+      message: `Esta acción no se puede deshacer: se borrarán de forma permanente los datos de ${p.name}. Si tiene viajes u otros registros asociados, la eliminación se rechazará y seguirá pendiente.`,
+      danger: true,
+      confirmLabel: 'Eliminar para siempre',
+    })
+    if (!ok) return
+    setError('')
+    try {
+      await adminApi.deletePassengerPermanently(p.passengerId)
+      load()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo eliminar')
+    }
   }
 
   return (
     <div className="space-y-5">
       <ConfirmDialogElement />
+      {error && <AlertBox>{error}</AlertBox>}
       <DetailListModal
         open={Boolean(listModal)}
         onClose={() => setListModal(null)}
@@ -2208,6 +2595,15 @@ function UsersSection() {
           value={passengers.filter((p) => p.ratingCount > 0).length}
           onClick={() => setListModal({ title: 'Usuarios con calificación', items: passengers.filter((p) => p.ratingCount > 0) })}
         />
+        {passengers.some((p) => p.pendingDeletion) && (
+          <StatCard
+            icon={Trash2}
+            label="Solicitudes de eliminación"
+            value={passengers.filter((p) => p.pendingDeletion).length}
+            tone="danger"
+            onClick={() => setListModal({ title: 'Pendientes de eliminación', items: passengers.filter((p) => p.pendingDeletion) })}
+          />
+        )}
       </div>
 
       <Card padded={false}>
@@ -2225,8 +2621,34 @@ function UsersSection() {
               key={p.passengerId}
               avatar={<Avatar url={p.photoUrl} fallback={p.name.charAt(0)} />}
               title={p.name}
-              subtitle={`${p.phone}${p.email ? ` · ${p.email}` : ''}${p.ratingCount > 0 ? ` · ${p.ratingAvg}★ (${p.ratingCount})` : ''}`}
-              right={<ToggleBadge active={p.active} onClick={() => toggleActive(p)} />}
+              subtitle={
+                <>
+                  {p.phone}
+                  {p.email ? ` · ${p.email}` : ''}
+                  {p.ratingCount > 0 ? ` · ${p.ratingAvg}★ (${p.ratingCount})` : ''}
+                  {!p.active && p.deactivationReason && (
+                    <>
+                      {' · '}
+                      <span className="font-medium text-red-600">Motivo: {p.deactivationReason}</span>
+                    </>
+                  )}
+                </>
+              }
+              right={
+                <>
+                  <Badge tone={p.pendingDeletion ? 'danger' : p.active ? 'success' : 'neutral'}>
+                    {p.pendingDeletion ? 'Pend. eliminación' : p.active ? 'Activo' : 'Bloqueado'}
+                  </Badge>
+                  <RowActions
+                    active={p.active}
+                    pendingDeletion={p.pendingDeletion}
+                    onToggleActive={() => toggleActive(p)}
+                    onRequestDelete={() => requestDelete(p)}
+                    onCancelDelete={() => cancelDelete(p)}
+                    onDeleteForever={() => deleteForever(p)}
+                  />
+                </>
+              }
             />
           ))
         )}

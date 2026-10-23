@@ -60,8 +60,8 @@ export function AuthProvider({ children }) {
   // partir de lo que ya esta en base de datos (no se pide elegir "pasajero"/"operador" ni datos
   // extra como el numero de taxi).
   const login = useCallback(
-    async (phone, password) => {
-      const { data } = await authApi.login({ phone, password })
+    async (phone, password, force = false) => {
+      const { data } = await authApi.login({ phone, password, force })
       applyAuthResult(data.data)
       return data.data.user
     },

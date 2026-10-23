@@ -121,7 +121,7 @@ function PaymentDueCard({ info }) {
   )
 }
 
-function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange, onUploadPhoto, uploadingPhoto, photoError }) {
+function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange, onUploadPhoto, uploadingPhoto, photoError, onRequestDeletion }) {
   const fileInputRef = useRef(null)
   if (!profile) return null
   return (
@@ -190,12 +190,19 @@ function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange,
       >
         Solicitar cambio de taxi
       </button>
+      <button
+        type="button"
+        onClick={onRequestDeletion}
+        className="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+      >
+        Eliminar mi cuenta
+      </button>
     </Card>
   )
 }
 
 export default function DriverHome() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const location = useLocation()
   const [online, setOnline] = useState(false)
   const { position, error: geoError } = useGeolocation(online)
@@ -228,6 +235,12 @@ export default function DriverHome() {
 
   const handleRequestTaxiChange = async (e) => {
     e.preventDefault()
+    const ok = await confirm({
+      title: 'Solicitar cambio de taxi',
+      message: `Se enviará tu solicitud para vincularte a la unidad ${taxiChangeForm.unitNumber} (${taxiChangeForm.plates}). Un administrador debe aprobarla. ¿Continuar?`,
+      confirmLabel: 'Enviar solicitud',
+    })
+    if (!ok) return
     setTaxiChangeBusy(true)
     setTaxiChangeError('')
     try {
@@ -238,6 +251,24 @@ export default function DriverHome() {
     } finally {
       setTaxiChangeBusy(false)
     }
+  }
+
+  const handleRequestAccountDeletion = async () => {
+    const ok = await confirm({
+      title: 'Eliminar mi cuenta',
+      message:
+        'Tu acceso se bloqueará de inmediato y quedará en revisión para que el administrador apruebe el borrado definitivo de tus datos. Esta acción no se puede deshacer una vez aprobada. ¿Continuar?',
+      danger: true,
+      confirmLabel: 'Eliminar mi cuenta',
+    })
+    if (!ok) return
+    try {
+      await driverApi.requestAccountDeletion()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo solicitar la eliminación')
+      return
+    }
+    await logout()
   }
 
   const closeTaxiChangeModal = () => {
@@ -604,6 +635,7 @@ export default function DriverHome() {
               onUploadPhoto={handleUploadPhoto}
               uploadingPhoto={uploadingPhoto}
               photoError={photoError}
+              onRequestDeletion={handleRequestAccountDeletion}
             />
             <ReferralCard />
           </div>
@@ -942,6 +974,14 @@ export default function DriverHome() {
           <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
             <Car className="mt-0.5 h-4 w-4 shrink-0" />
             Por el momento no tienes un taxi asignado. Pide a tu administrador que te asigne un turno para poder conectarte.
+          </div>
+        )}
+
+        {!activeTrip && !finishedTrip && currentTaxi && currentTaxi.active === false && (
+          <div className="flex items-start gap-2 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            Tu unidad (Unidad {currentTaxi.unitNumber}) fue bloqueada por el administrador
+            {currentTaxi.deactivationReason ? `. Motivo: ${currentTaxi.deactivationReason}` : ', contacta al administrador'}.
           </div>
         )}
 

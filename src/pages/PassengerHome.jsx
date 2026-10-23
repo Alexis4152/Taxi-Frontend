@@ -90,7 +90,7 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 
 const debouncedSearch = debounce(searchAddress, 500)
 
-function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onUploadPhoto, uploadingPhoto, photoError }) {
+function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onUploadPhoto, uploadingPhoto, photoError, onRequestDeletion }) {
   const fileInputRef = useRef(null)
   if (!profile) return null
   return (
@@ -148,6 +148,13 @@ function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onU
           </button>
         )}
       </div>
+      <button
+        type="button"
+        onClick={onRequestDeletion}
+        className="mt-3 w-full rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+      >
+        Eliminar mi cuenta
+      </button>
     </Card>
   )
 }
@@ -223,6 +230,24 @@ export default function PassengerHome() {
     } finally {
       setUploadingPhoto(false)
     }
+  }
+
+  const handleRequestAccountDeletion = async () => {
+    const ok = await confirm({
+      title: 'Eliminar mi cuenta',
+      message:
+        'Tu acceso se bloqueará de inmediato y quedará en revisión para que el administrador apruebe el borrado definitivo de tus datos. Esta acción no se puede deshacer una vez aprobada. ¿Continuar?',
+      danger: true,
+      confirmLabel: 'Eliminar mi cuenta',
+    })
+    if (!ok) return
+    try {
+      await passengerApi.requestAccountDeletion()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo solicitar la eliminación')
+      return
+    }
+    await logout()
   }
 
   const openRatings = () => {
@@ -679,6 +704,7 @@ export default function PassengerHome() {
               onUploadPhoto={handleUploadPhoto}
               uploadingPhoto={uploadingPhoto}
               photoError={photoError}
+              onRequestDeletion={handleRequestAccountDeletion}
             />
             <ReferralCard />
           </div>

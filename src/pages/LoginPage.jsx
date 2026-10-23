@@ -6,6 +6,9 @@ import BrandPanel from '../components/ui/BrandPanel'
 import Logo from '../components/ui/Logo'
 import { Label, Input } from '../components/ui/Field'
 import Button from '../components/ui/Button'
+import { useConfirm } from '../components/ui/ConfirmDialog'
+
+const SESSION_OPEN_MESSAGE = 'Ya cuentas con una sesion abierta'
 
 const ROLE_HOME = {
   SUPER_ADMIN: '/admin',
@@ -18,6 +21,7 @@ export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { confirm, ConfirmDialogElement } = useConfirm()
 
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
@@ -27,15 +31,35 @@ export default function LoginPage() {
 
   const updatePhone = (e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))
 
+  const doLogin = async (force = false) => {
+    const user = await login(phone, password, force)
+    navigate(ROLE_HOME[user.role] || '/', { state: { justLoggedIn: true } })
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const user = await login(phone, password)
-      navigate(ROLE_HOME[user.role] || '/', { state: { justLoggedIn: true } })
+      await doLogin(false)
     } catch (err) {
-      setError(err.response?.data?.message || 'No se pudo iniciar sesion')
+      const message = err.response?.data?.message || 'No se pudo iniciar sesion'
+      if (message.startsWith(SESSION_OPEN_MESSAGE)) {
+        const ok = await confirm({
+          title: 'Sesión ya abierta',
+          message: 'Ya cuentas con una sesión abierta en otro dispositivo o navegador. ¿Deseas continuar? Se cerrará esa sesión y se abrirá esta.',
+          confirmLabel: 'Continuar aquí',
+        })
+        if (ok) {
+          try {
+            await doLogin(true)
+          } catch (err2) {
+            setError(err2.response?.data?.message || 'No se pudo iniciar sesion')
+          }
+        }
+      } else {
+        setError(message)
+      }
     } finally {
       setLoading(false)
     }
@@ -43,6 +67,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen bg-ink-50">
+      <ConfirmDialogElement />
       <BrandPanel
         title="Pide un taxi en minutos, a donde quieras ir"
         description="Comparte tu ubicación, elige tu destino y ve llegar a tu operador en tiempo real, con la tarifa clara antes de confirmar."

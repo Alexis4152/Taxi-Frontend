@@ -15,21 +15,22 @@ export default function PhotoPicker({ value, onChange, existingUrl, size = 96, r
 
   return (
     <div className="flex items-center gap-4">
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        className={`relative flex shrink-0 items-center justify-center overflow-hidden border-2 border-dashed border-ink-200 bg-ink-50 text-ink-300 ${rounded}`}
-        style={{ width: size, height: size }}
-      >
-        {previewUrl ? (
-          <img src={previewUrl} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <User className="h-8 w-8" />
-        )}
-        <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-ink-900 text-white">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className={`flex h-full w-full items-center justify-center overflow-hidden border-2 border-dashed border-ink-200 bg-ink-50 text-ink-300 ${rounded}`}
+        >
+          {previewUrl ? (
+            <img src={previewUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <User className="h-8 w-8" />
+          )}
+        </button>
+        <span className="pointer-events-none absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-ink-900 text-white ring-2 ring-white">
           <Camera className="h-3 w-3" />
         </span>
-      </button>
+      </div>
       <div className="text-xs text-ink-500">
         <p className="font-medium text-ink-700">Foto de perfil</p>
         <p>Toca el círculo para tomar una foto o subir una desde tu galería.</p>

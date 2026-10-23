@@ -21,3 +21,4 @@ export const startTrip = (tripId, verificationCode) => api.post(`/api/driver/tri
 export const completeTrip = (tripId) => api.post(`/api/driver/trips/${tripId}/complete`)
 export const confirmPayment = (tripId) => api.post(`/api/driver/trips/${tripId}/confirm-payment`)
 export const paymentInfo = () => api.get('/api/driver/payment-info')
+export const requestAccountDeletion = () => api.post('/api/driver/request-deletion')

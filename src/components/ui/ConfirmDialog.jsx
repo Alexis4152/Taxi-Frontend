@@ -2,26 +2,34 @@ import { useCallback, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
 import Button from './Button'
+import { Label, Textarea } from './Field'
 
 /**
  * Confirmacion para operaciones criticas (dar de alta, asignar turno, dar de baja, etc.).
- * Uso: const { confirm, ConfirmDialogElement } = useConfirm(); ... if (await confirm({title, message})) { ... }
- * y renderizar <ConfirmDialogElement /> una vez en el componente.
+ * Uso normal (resuelve boolean): const { confirm, ConfirmDialogElement } = useConfirm();
+ * if (await confirm({title, message})) { ... }
+ * Uso con texto libre (ej. motivo de baja): pasar requireInput: true + inputLabel - resuelve el
+ * texto escrito al confirmar, o null si se cancela (nunca un string vacio por cancelar, para que
+ * "if (reason === null) return" distinga cancelar de confirmar sin escribir nada).
+ * Renderizar <ConfirmDialogElement /> una vez en el componente en cualquier caso.
  */
 export function useConfirm() {
   const [state, setState] = useState(null)
+  const [inputValue, setInputValue] = useState('')
   const resolver = useRef(null)
 
-  const confirm = useCallback(({ title, message, confirmLabel = 'Confirmar', danger = false }) => {
-    setState({ title, message, confirmLabel, danger })
+  const confirm = useCallback(({ title, message, confirmLabel = 'Confirmar', danger = false, requireInput = false, inputLabel, inputPlaceholder }) => {
+    setState({ title, message, confirmLabel, danger, requireInput, inputLabel, inputPlaceholder })
+    setInputValue('')
     return new Promise((resolve) => {
       resolver.current = resolve
     })
   }, [])
 
-  const handle = (value) => {
+  const handle = (confirmed) => {
+    const result = state?.requireInput ? (confirmed ? inputValue : null) : confirmed
     setState(null)
-    resolver.current?.(value)
+    resolver.current?.(result)
     resolver.current = null
   }
 
@@ -34,6 +42,18 @@ export function useConfirm() {
           </span>
           <p className="text-sm text-ink-600">{state?.message}</p>
         </div>
+        {state?.requireInput && (
+          <div>
+            {state.inputLabel && <Label>{state.inputLabel}</Label>}
+            <Textarea
+              rows={2}
+              maxLength={300}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder={state.inputPlaceholder}
+            />
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <Button variant="outline" onClick={() => handle(false)}>
             Cancelar
