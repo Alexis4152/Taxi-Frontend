@@ -14,3 +14,7 @@ export const createSavedPlace = (data) => api.post('/api/passenger/saved-places'
 export const deleteSavedPlace = (id) => api.delete(`/api/passenger/saved-places/${id}`)
 
 export const requestAccountDeletion = () => api.post('/api/passenger/request-deletion')
+
+export const listTrustedContacts = () => api.get('/api/passenger/trusted-contacts')
+export const createTrustedContact = (data) => api.post('/api/passenger/trusted-contacts', data)
+export const deleteTrustedContact = (id) => api.delete(`/api/passenger/trusted-contacts/${id}`)

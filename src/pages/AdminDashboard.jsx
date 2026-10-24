@@ -178,7 +178,7 @@ const iconActionClass = 'flex h-8 w-8 items-center justify-center rounded-lg tra
  * esta "pendiente de eliminacion" se reemplaza el boton de eliminar por restaurar + borrar
  * definitivo, y se deshabilita el de bloquear (no tiene sentido tocarlo en ese estado).
  */
-function RowActions({ active, pendingDeletion, onEdit, onToggleActive, onRequestDelete, onCancelDelete, onDeleteForever }) {
+function RowActions({ active, pendingDeletion, onEdit, onToggleActive, onRequestDelete, onCancelDelete, onDeleteForever, hideDelete = false }) {
   return (
     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
       {onEdit && (
@@ -195,20 +195,21 @@ function RowActions({ active, pendingDeletion, onEdit, onToggleActive, onRequest
       >
         <AlertTriangle className="h-4 w-4" />
       </button>
-      {pendingDeletion ? (
-        <>
-          <button type="button" title="Cancelar eliminación" onClick={onCancelDelete} className={`${iconActionClass} bg-amber-50 text-amber-600 hover:bg-amber-100`}>
-            <RotateCcw className="h-4 w-4" />
-          </button>
-          <button type="button" title="Eliminar definitivamente" onClick={onDeleteForever} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100`}>
+      {!hideDelete &&
+        (pendingDeletion ? (
+          <>
+            <button type="button" title="Cancelar eliminación" onClick={onCancelDelete} className={`${iconActionClass} bg-amber-50 text-amber-600 hover:bg-amber-100`}>
+              <RotateCcw className="h-4 w-4" />
+            </button>
+            <button type="button" title="Eliminar definitivamente" onClick={onDeleteForever} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100`}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </>
+        ) : (
+          <button type="button" title="Eliminar" onClick={onRequestDelete} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100`}>
             <Trash2 className="h-4 w-4" />
           </button>
-        </>
-      ) : (
-        <button type="button" title="Eliminar" onClick={onRequestDelete} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100`}>
-          <Trash2 className="h-4 w-4" />
-        </button>
-      )}
+        ))}
     </div>
   )
 }
@@ -608,6 +609,7 @@ function DriversSection({ orgId, isSuperAdmin }) {
   const [detailTripsToday, setDetailTripsToday] = useState(null)
   const [minRatingCount, setMinRatingCount] = useState(0)
   const [listModal, setListModal] = useState(null)
+  const [viewMode, setViewMode] = useState('all') // 'all' | 'pending-payment'
   const { confirm, ConfirmDialogElement } = useConfirm()
 
   const load = () => adminApi.listDrivers().then(({ data }) => setAllDrivers(data.data))
@@ -655,6 +657,24 @@ function DriversSection({ orgId, isSuperAdmin }) {
     const rest = filtered.filter((d) => !topRankedIds.includes(d.driverId))
     return [...ranked, ...rest]
   }, [drivers, minRatingCount, topRankedIds])
+
+  // De mayor a menor saldo pendiente - el que mas debe primero, para que el admin lo revise de
+  // entrada sin tener que ordenar nada el mismo.
+  const pendingPaymentDrivers = useMemo(
+    () => drivers.filter((d) => Number(d.pendingAmount) > 0).sort((a, b) => Number(b.pendingAmount) - Number(a.pendingAmount)),
+    [drivers]
+  )
+
+  const handleMarkPaidInList = async (driver) => {
+    const ok = await confirm({
+      title: 'Confirmar pago recibido',
+      message: `Se marcará el saldo de ${driver.name} ($${driver.pendingAmount} MXN) como pagado y recuperará acceso para conectarse. ¿Continuar?`,
+      confirmLabel: 'Confirmar pago',
+    })
+    if (!ok) return
+    await adminApi.markDriverPaid(driver.driverId)
+    load()
+  }
 
   const openDetail = (driverId, tripsToday = null) => {
     setDetailId(driverId)
@@ -944,6 +964,72 @@ function DriversSection({ orgId, isSuperAdmin }) {
       </Card>
       )}
 
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setViewMode('all')}
+          className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+            viewMode === 'all' ? 'bg-ink-900 text-white' : 'border border-ink-200 text-ink-600 hover:bg-ink-50'
+          }`}
+        >
+          Todos
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('pending-payment')}
+          className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+            viewMode === 'pending-payment' ? 'bg-ink-900 text-white' : 'border border-ink-200 text-ink-600 hover:bg-ink-50'
+          }`}
+        >
+          Pendientes de pago {pendingPaymentDrivers.length > 0 && `(${pendingPaymentDrivers.length})`}
+        </button>
+      </div>
+
+      {viewMode === 'pending-payment' ? (
+        <Card padded={false}>
+          <CardHeader
+            className="px-5 pt-5"
+            title="Pendientes de pago"
+            subtitle="De mayor a menor saldo · toca uno para ver el detalle"
+          />
+          {pendingPaymentDrivers.length === 0 ? (
+            <div className="px-5 pb-5 pt-3">
+              <EmptyState icon={CreditCard} title="Nadie debe saldo" description="Todos los operadores están al corriente con sus pagos." />
+            </div>
+          ) : (
+            pendingPaymentDrivers.map((d) => (
+              <ListRow
+                key={d.driverId}
+                onClick={() => openDetail(d.driverId)}
+                avatar={<Avatar url={d.photoUrl} fallback={d.name.charAt(0)} />}
+                title={d.name}
+                subtitle={
+                  <>
+                    {d.phone} · {d.unpaidTripCount} viaje{d.unpaidTripCount === 1 ? '' : 's'} sin pagar
+                    {d.paymentDueAt && ` · vence ${new Date(d.paymentDueAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}`}
+                  </>
+                }
+                right={
+                  <>
+                    <Badge tone={d.paymentBlocked ? 'danger' : 'warning'}>${d.pendingAmount} MXN</Badge>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleMarkPaidInList(d)
+                      }}
+                      className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Confirmar pago
+                    </button>
+                    <RowActions active={d.active} pendingDeletion={false} onToggleActive={() => toggleActive(d)} hideDelete />
+                  </>
+                }
+              />
+            ))
+          )}
+        </Card>
+      ) : (
       <Card padded={false}>
         <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-5">
           <CardHeader title="Operadores" subtitle={`${visibleDrivers.length} de ${drivers.length} · toca uno para ver el detalle y sus calificaciones`} />
@@ -1012,6 +1098,7 @@ function DriversSection({ orgId, isSuperAdmin }) {
           })
         )}
       </Card>
+      )}
     </div>
   )
 }
@@ -1974,6 +2061,8 @@ function PlatformSettingsSection() {
   const [passengerFeeValue, setPassengerFeeValue] = useState('0')
   const [paymentDeadlineHour, setPaymentDeadlineHour] = useState('12')
   const [paymentTripThreshold, setPaymentTripThreshold] = useState('20')
+  const [fareRoundToMultipleOf5, setFareRoundToMultipleOf5] = useState(false)
+  const [referralProgramEnabled, setReferralProgramEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -1992,6 +2081,8 @@ function PlatformSettingsSection() {
     setPassengerFeeValue(String(s.passengerFeeValue))
     setPaymentDeadlineHour(String(s.paymentDeadlineHour))
     setPaymentTripThreshold(String(s.paymentTripThreshold))
+    setFareRoundToMultipleOf5(Boolean(s.fareRoundToMultipleOf5))
+    setReferralProgramEnabled(Boolean(s.referralProgramEnabled))
   }
 
   useEffect(() => {
@@ -2026,6 +2117,8 @@ function PlatformSettingsSection() {
         passengerFeeValue: Number(passengerFeeValue),
         paymentDeadlineHour: Number(paymentDeadlineHour),
         paymentTripThreshold: Number(paymentTripThreshold),
+        fareRoundToMultipleOf5,
+        referralProgramEnabled,
       })
       applySettings(data.data)
       setMessage(data.message || 'Configuración actualizada')
@@ -2089,13 +2182,21 @@ function PlatformSettingsSection() {
               </p>
             </div>
             <div>
-              <Label hint="opcional">Beneficio por invitar (programa de referidos)</Label>
+              <Switch
+                label="Mostrar el programa de referidos a operadores y pasajeros"
+                checked={referralProgramEnabled}
+                onChange={setReferralProgramEnabled}
+              />
+              <div className="mt-3">
+                <Label hint="opcional">Beneficio por invitar (programa de referidos)</Label>
+              </div>
               <Textarea
                 rows={2}
                 maxLength={300}
                 value={rewardDescription}
                 onChange={(e) => setRewardDescription(e.target.value)}
                 placeholder="Ej. 1 viaje gratis por cada 3 personas que invites"
+                disabled={!referralProgramEnabled}
               />
               <p className="mt-1.5 text-[11px] text-ink-400">
                 Se le muestra a pasajeros y operadores junto a su código. No se aplica automáticamente (aún no hay
@@ -2167,6 +2268,15 @@ function PlatformSettingsSection() {
             <p className="text-[11px] text-ink-400">
               El cobro al pasajero se le suma a la tarifa automáticamente al pedir un viaje. El operador debe ambos
               cobros a la plataforma por cada viaje que completa (ver "monto por pagar" en su panel).
+            </p>
+            <Switch
+              label="Redondear tarifa al múltiplo de 5 más cercano"
+              checked={fareRoundToMultipleOf5}
+              onChange={setFareRoundToMultipleOf5}
+            />
+            <p className="text-[11px] text-ink-400">
+              Ej. $42.27 se cobra $40, $43.80 se cobra $45 - para que el pasajero pueda pagar en efectivo sin necesitar
+              monedas. Aplica a la tarifa base del viaje, no al cobro de servicio.
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>

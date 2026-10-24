@@ -73,7 +73,12 @@ export default function RegisterPage() {
       setError('El teléfono debe tener exactamente 10 dígitos')
       return
     }
+    if (role === 'DRIVER' && !photo) {
+      setError('La foto de perfil es obligatoria para operadores')
+      return
+    }
     setLoading(true)
+    let photoUploadFailed = false
     try {
       if (role === 'PASSENGER') {
         await register({
@@ -102,8 +107,12 @@ export default function RegisterPage() {
           acceptedTerms,
           referralCode: form.referralCode || null,
         })
-        if (photo) {
-          await driverApi.uploadPhoto(photo).catch(() => {})
+        try {
+          await driverApi.uploadPhoto(photo)
+        } catch {
+          // La cuenta ya quedo creada - se lo dejamos saber para que suba la foto al entrar, en vez
+          // de fallar todo el registro por un problema de subida (ej. mala conexion).
+          photoUploadFailed = true
         }
       }
       // Se crea la cuenta y se sube la foto ya autenticado (necesario para esos pasos), pero no se
@@ -111,7 +120,7 @@ export default function RegisterPage() {
       // para que el flujo de entrada sea siempre el mismo (login), sin importar que se acaba de
       // registrar.
       await logout()
-      navigate('/login', { state: { registered: true } })
+      navigate('/login', { state: { registered: true, photoUploadFailed } })
     } catch (err) {
       setError(err.response?.data?.message || 'No se pudo completar el registro')
     } finally {
@@ -158,7 +167,7 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <PhotoPicker value={photo} onChange={setPhoto} />
+            <PhotoPicker value={photo} onChange={setPhoto} required={role === 'DRIVER'} />
             <div>
               <Label>Nombre completo</Label>
               <Input icon={User} required value={form.name} onChange={update('name')} />

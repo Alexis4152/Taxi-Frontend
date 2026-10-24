@@ -31,6 +31,15 @@ export async function searchAddress(query) {
   return data.data
 }
 
+export async function suggestAddress(query, near) {
+  const key = `${normalize(query)}|${near ? `${roundCoord(near.lat)},${roundCoord(near.lng)}` : 'none'}`
+  if (forwardCache.has(key)) return forwardCache.get(key)
+
+  const { data } = await geocodingApi.suggestAddress(query, near?.lat, near?.lng)
+  rememberEntry(forwardCache, key, data.data)
+  return data.data
+}
+
 export async function reverseGeocode(lat, lng) {
   const key = `${roundCoord(lat)},${roundCoord(lng)}`
   if (reverseCache.has(key)) return reverseCache.get(key)

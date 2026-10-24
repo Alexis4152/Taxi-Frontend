@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react'
 import { Gift, Share2 } from 'lucide-react'
 import { myReferral } from '../api/referrals'
+import { getPublicSettings } from '../api/settings'
 import Card, { CardHeader } from './ui/Card'
 
 export default function ReferralCard() {
   const [info, setInfo] = useState(null)
   const [copied, setCopied] = useState(false)
+  // undefined = cargando todavia (no se sabe si mostrar u ocultar) - se asume oculto hasta
+  // confirmar, para no mostrar la tarjeta un instante y luego desaparecerla de golpe.
+  const [enabled, setEnabled] = useState(undefined)
 
   useEffect(() => {
     myReferral().then(({ data }) => setInfo(data.data)).catch(() => {})
+    getPublicSettings()
+      .then(({ data }) => setEnabled(data.data.referralProgramEnabled))
+      .catch(() => setEnabled(true))
   }, [])
 
-  if (!info) return null
+  if (!info || !enabled) return null
 
   const handleShare = async () => {
     const link = `${window.location.origin}/register?ref=${info.code}`

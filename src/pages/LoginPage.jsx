@@ -131,6 +131,13 @@ export default function LoginPage() {
               </div>
             )}
 
+            {location.state?.photoUploadFailed && (
+              <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                No se pudo subir tu foto durante el registro. Podrás subirla desde tu perfil.
+              </div>
+            )}
+
             {error && (
               <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />

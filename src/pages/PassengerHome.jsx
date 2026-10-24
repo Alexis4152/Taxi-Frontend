@@ -28,6 +28,11 @@ import {
   Plus,
   Trash2,
   KeyRound,
+  Siren,
+  HelpCircle,
+  Pencil,
+  Users,
+  ChevronDown,
 } from 'lucide-react'
 import * as passengerApi from '../api/passenger'
 import Layout from '../components/Layout'
@@ -43,6 +48,7 @@ import TripHistoryRow from '../components/TripHistoryRow'
 import TripStatusStepper from '../components/TripStatusStepper'
 import ReferralCard from '../components/ReferralCard'
 import Card, { CardHeader } from '../components/ui/Card'
+import AddressAutocomplete from '../components/ui/AddressAutocomplete'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import StatCard from '../components/ui/StatCard'
@@ -58,6 +64,7 @@ import { useInactivityLogout } from '../hooks/useInactivityLogout'
 import { useBrowserNotifications } from '../hooks/useBrowserNotifications'
 import NotificationPermissionBanner from '../components/NotificationPermissionBanner'
 import { useAuth } from '../context/AuthContext'
+import { updateLastLocation } from '../api/auth'
 import {
   myActiveTripAsPassenger,
   myPassengerStats,
@@ -67,10 +74,38 @@ import {
   nearbyDrivers,
   reportTrip,
   getVerificationCode,
+  updateTripOrigin,
+  updateTripDestination,
 } from '../api/trips'
-import { reverseGeocode, searchAddress, debounce } from '../services/geocodingService'
+import { reverseGeocode } from '../services/geocodingService'
 import { estimateRoute } from '../services/routingService'
-import { NEARBY_DRIVERS_POLL_MS } from '../config'
+import { NEARBY_DRIVERS_POLL_MS, DEFAULT_MAP_CENTER } from '../config'
+
+// Distancia en linea recta entre dos puntos (km) - usada solo para estimar cuanto falta para que
+// el operador llegue al punto de recogida, sin depender de un servicio de rutas de pago.
+function haversineKm(a, b) {
+  if (!a || !b) return null
+  const R = 6371
+  const toRad = (deg) => (deg * Math.PI) / 180
+  const dLat = toRad(b.lat - a.lat)
+  const dLng = toRad(b.lng - a.lng)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
+}
+
+// Velocidad promedio urbana usada solo para esta estimacion - no hay forma gratuita de pedir una
+// ETA real sin golpear el servidor publico de OSRM en cada ping de ubicacion del operador (llega
+// cada pocos segundos), asi que se calcula en el navegador a partir de la distancia en linea recta.
+const AVG_SPEED_KMH = 25
+
+const HELP_FAQS = [
+  { q: '¿Cómo pago mi viaje?', a: 'En efectivo o por transferencia al operador, según lo que elijas al pedirlo. El total se muestra antes de confirmar.' },
+  { q: '¿Qué es el PIN del viaje?', a: 'Es el código que debes decirle al operador al subir, para confirmar que el taxi que llegó es el tuyo.' },
+  { q: '¿Cómo cancelo un viaje?', a: 'Usa el botón "Cancelar viaje" en la pantalla de tu viaje activo.' },
+  { q: '¿Cómo reporto un problema?', a: 'Usa el botón "Reportar un problema" dentro del viaje; un administrador lo revisará.' },
+  { q: '¿Cómo comparto mi viaje?', a: 'Usa el botón "Compartir viaje"; genera un enlace para que alguien más siga tu viaje en tiempo real.' },
+  { q: '¿Qué hago en una emergencia?', a: 'Usa el botón "Llamar al 911" dentro del viaje.' },
+]
 
 const STATUS_COPY = {
   SEARCHING: { label: 'Buscando un taxi cercano...', tone: 'brand' },
@@ -88,9 +123,7 @@ const MAP_HEIGHT = 'clamp(240px, 42dvh, 420px)'
 const totalToPay = (fare, fee) => (Number(fare || 0) + Number(fee || 0)).toFixed(2)
 const API_URL = import.meta.env.VITE_API_URL || ''
 
-const debouncedSearch = debounce(searchAddress, 500)
-
-function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onUploadPhoto, uploadingPhoto, photoError, onRequestDeletion }) {
+function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onUploadPhoto, uploadingPhoto, photoError, onRequestDeletion, onOpenContacts }) {
   const fileInputRef = useRef(null)
   if (!profile) return null
   return (
@@ -150,8 +183,15 @@ function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onU
       </div>
       <button
         type="button"
+        onClick={onOpenContacts}
+        className="mt-3 w-full rounded-xl border border-ink-200 py-2 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+      >
+        Contactos de confianza
+      </button>
+      <button
+        type="button"
         onClick={onRequestDeletion}
-        className="mt-3 w-full rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+        className="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
       >
         Eliminar mi cuenta
       </button>
@@ -170,8 +210,6 @@ export default function PassengerHome() {
   const [originAddress, setOriginAddress] = useState('')
   const [destinationAddress, setDestinationAddress] = useState('')
   const [destinationQuery, setDestinationQuery] = useState('')
-  const [searching, setSearching] = useState(false)
-  const [searchError, setSearchError] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -212,6 +250,18 @@ export default function PassengerHome() {
   const [savingPlace, setSavingPlace] = useState(false)
   const [savedPlaceError, setSavedPlaceError] = useState('')
   const [verificationCode, setVerificationCode] = useState(null)
+  const [trustedContacts, setTrustedContacts] = useState([])
+  const [contactsOpen, setContactsOpen] = useState(false)
+  const [newContactName, setNewContactName] = useState('')
+  const [newContactPhone, setNewContactPhone] = useState('')
+  const [contactsError, setContactsError] = useState('')
+  const [savingContact, setSavingContact] = useState(false)
+  const [editingStop, setEditingStop] = useState(null) // 'origin' | 'destination' | null
+  const [editQuery, setEditQuery] = useState('')
+  const [editSearching, setEditSearching] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [helpFaqOpen, setHelpFaqOpen] = useState(null)
   const geocodedOriginRef = useRef(false)
   const { confirm, ConfirmDialogElement } = useConfirm()
 
@@ -269,6 +319,7 @@ export default function PassengerHome() {
   const openHistory = () => openStatModal('Tus viajes', () => true)
 
   const loadSavedPlaces = () => passengerApi.listSavedPlaces().then(({ data }) => setSavedPlaces(data.data)).catch(() => {})
+  const loadTrustedContacts = () => passengerApi.listTrustedContacts().then(({ data }) => setTrustedContacts(data.data)).catch(() => {})
 
   useEffect(() => {
     myActiveTripAsPassenger()
@@ -276,6 +327,7 @@ export default function PassengerHome() {
       .catch(() => setTrip(null))
     loadStats()
     loadSavedPlaces()
+    loadTrustedContacts()
     const loadProfile = () => passengerApi.myProfile().then(({ data }) => setProfile(data.data)).catch(() => {})
     loadProfile()
     // El operador puede calificar al pasajero en cualquier momento despues de terminar un viaje -
@@ -287,6 +339,13 @@ export default function PassengerHome() {
 
   const gpsOrigin = position ? { lat: position.lat, lng: position.lng } : null
   const origin = manualOrigin || gpsOrigin
+  // Mientras el GPS en vivo todavia no responde, el mapa abre cerca de donde esta cuenta se conecto
+  // la ultima vez (ver User.lastKnownLat/Lng) en vez de siempre en el mismo punto fijo - no afecta
+  // en nada la ubicacion real una vez que el GPS si responde.
+  const defaultCenter =
+    user?.lastKnownLat != null && user?.lastKnownLng != null
+      ? { lat: user.lastKnownLat, lng: user.lastKnownLng }
+      : DEFAULT_MAP_CENTER
 
   // Reverse-geocode el origen una sola vez que tenemos GPS (el usuario puede editarlo despues, o
   // elegir otro punto de recogida en el mapa, que se geocodifica aparte mas abajo).
@@ -298,6 +357,10 @@ export default function PassengerHome() {
         .then((address) => setOriginAddress(address))
         .catch(() => setOriginAddress(`Mi ubicación (${position.lat.toFixed(4)}, ${position.lng.toFixed(4)})`))
     }
+    // Se guarda para que la proxima vez que inicie sesion el mapa abra cerca de aqui en vez de en
+    // el centro fijo por defecto, mientras el GPS en vivo todavia no responde - no afecta en nada
+    // a "usar mi ubicacion actual", que sigue siendo el GPS real de este momento.
+    updateLastLocation(position.lat, position.lng).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position])
 
@@ -430,23 +493,6 @@ export default function PassengerHome() {
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip?.status])
-
-  const handleSearchDestination = async (query) => {
-    setDestinationQuery(query)
-    if (query.trim().length < 3) return
-    setSearching(true)
-    setSearchError('')
-    try {
-      const result = await debouncedSearch(query)
-      setDestination({ lat: result.lat, lng: result.lng })
-      setDestinationAddress(result.displayName)
-      setDestinationQuery('')
-    } catch (err) {
-      setSearchError(err.response?.data?.message || 'No se encontró esa dirección')
-    } finally {
-      setSearching(false)
-    }
-  }
 
   const handleMapClick = (point) => {
     if (pickingField === 'origin') {
@@ -581,6 +627,67 @@ export default function PassengerHome() {
     }
   }
 
+  // Envia el enlace de seguimiento en vivo a un contacto de confianza por WhatsApp (deep link
+  // "wa.me", sin ningun proveedor de SMS de pago) - el contacto no necesita tener la app.
+  const handleShareWithContact = (contact) => {
+    if (!trip?.shareToken) return
+    const url = `${window.location.origin}/track/${trip.shareToken}`
+    const text = `Hola ${contact.name}, voy en un viaje con NexoraTaxis, aquí puedes seguirlo en tiempo real: ${url}`
+    window.open(`https://wa.me/${contact.phone.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  const handleAddTrustedContact = async (e) => {
+    e.preventDefault()
+    setContactsError('')
+    setSavingContact(true)
+    try {
+      await passengerApi.createTrustedContact({ name: newContactName.trim(), phone: newContactPhone.trim() })
+      setNewContactName('')
+      setNewContactPhone('')
+      loadTrustedContacts()
+    } catch (err) {
+      setContactsError(err.response?.data?.message || 'No se pudo guardar el contacto')
+    } finally {
+      setSavingContact(false)
+    }
+  }
+
+  const handleDeleteTrustedContact = async (contact) => {
+    const ok = await confirm({
+      title: 'Eliminar contacto de confianza',
+      message: `Se eliminará a ${contact.name} de tus contactos de confianza.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    })
+    if (!ok) return
+    await passengerApi.deleteTrustedContact(contact.id).catch(() => {})
+    loadTrustedContacts()
+  }
+
+  const startEditStop = (stop) => {
+    setEditingStop(stop)
+    setEditQuery('')
+    setEditError('')
+  }
+
+  const handleEditStopSelect = async (result) => {
+    setEditSearching(true)
+    setEditError('')
+    try {
+      const { data } =
+        editingStop === 'origin'
+          ? await updateTripOrigin(trip.id, { originLat: result.lat, originLng: result.lng, originAddress: result.displayName })
+          : await updateTripDestination(trip.id, { destinationLat: result.lat, destinationLng: result.lng, destinationAddress: result.displayName })
+      setTrip(data.data)
+      setEditingStop(null)
+      setEditQuery('')
+    } catch (err) {
+      setEditError(err.response?.data?.message || 'No se pudo actualizar')
+    } finally {
+      setEditSearching(false)
+    }
+  }
+
   const handleCancelTrip = async (reason) => {
     if (!trip) return
     setCancelBusy(true)
@@ -609,6 +716,16 @@ export default function PassengerHome() {
   }
 
   const mapDriver = useMemo(() => driverLive, [driverLive])
+
+  // Solo mientras el operador va en camino a recoger (ACCEPTED): una vez que el viaje inicia, el
+  // origen deja de ser el punto de encuentro relevante.
+  const etaToPickupMin = useMemo(() => {
+    if (!trip || trip.status !== 'ACCEPTED' || !driverLive) return null
+    const distanceKm = haversineKm(driverLive, { lat: trip.originLat, lng: trip.originLng })
+    if (distanceKm == null) return null
+    return Math.max(1, Math.round((distanceKm / AVG_SPEED_KMH) * 60))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.status, trip?.originLat, trip?.originLng, driverLive])
 
   if (trip === undefined) {
     return (
@@ -705,6 +822,7 @@ export default function PassengerHome() {
               uploadingPhoto={uploadingPhoto}
               photoError={photoError}
               onRequestDeletion={handleRequestAccountDeletion}
+              onOpenContacts={() => setContactsOpen(true)}
             />
             <ReferralCard />
           </div>
@@ -829,6 +947,7 @@ export default function PassengerHome() {
               pickingLabel={pickingField === 'origin' ? 'Toca el mapa para elegir dónde te recogemos' : 'Toca el mapa para elegir tu destino'}
               height={MAP_HEIGHT}
               myLocation={gpsOrigin}
+              defaultCenter={defaultCenter}
             />
 
             <Card>
@@ -848,19 +967,27 @@ export default function PassengerHome() {
                 </div>
                 <div>
                   <Label hint="escribe o toca el mapa">A dónde quieres ir</Label>
-                  <div className="relative">
-                    <Input
-                      icon={Flag}
-                      value={destinationQuery || destinationAddress}
-                      onChange={(e) => {
-                        setDestinationAddress(e.target.value)
-                        handleSearchDestination(e.target.value)
-                      }}
-                      placeholder="Escribe una dirección..."
-                    />
-                    {searching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-ink-400" />}
-                  </div>
-                  {searchError && <p className="mt-1 text-[11px] text-red-600">{searchError}</p>}
+                  <AddressAutocomplete
+                    value={destinationQuery || destinationAddress}
+                    onChange={(text) => {
+                      setDestinationQuery(text)
+                      // Si ya habia una direccion elegida y el usuario sigue escribiendo, esa
+                      // seleccion ya no es valida - se limpia para obligar a elegir de nuevo de la
+                      // lista antes de poder pedir el viaje (si no, se podia pedir un viaje con un
+                      // texto que ya no correspondia a esas coordenadas).
+                      if (destination) {
+                        setDestination(null)
+                        setDestinationAddress('')
+                      }
+                    }}
+                    onSelect={(result) => {
+                      setDestination({ lat: result.lat, lng: result.lng })
+                      setDestinationAddress(result.displayName)
+                      setDestinationQuery('')
+                    }}
+                    near={origin}
+                    placeholder="Escribe una dirección..."
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -1029,6 +1156,64 @@ export default function PassengerHome() {
           </Button>
         </Modal>
 
+        <Modal open={contactsOpen} onClose={() => setContactsOpen(false)} title="Contactos de confianza" subtitle="Compárteles tus viajes en tiempo real por WhatsApp">
+          <div className="space-y-2">
+            {trustedContacts.length === 0 ? (
+              <p className="text-xs text-ink-400">Aún no tienes contactos guardados.</p>
+            ) : (
+              trustedContacts.map((contact) => (
+                <div key={contact.id} className="flex items-center justify-between rounded-xl border border-ink-100 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-semibold text-ink-900">{contact.name}</p>
+                    <p className="text-xs text-ink-500">{contact.phone}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTrustedContact(contact)}
+                    aria-label={`Eliminar ${contact.name}`}
+                    className="text-ink-300 hover:text-red-600"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          <form onSubmit={handleAddTrustedContact} className="mt-4 space-y-3 border-t border-ink-100 pt-4">
+            <div>
+              <Label>Nombre</Label>
+              <Input required value={newContactName} onChange={(e) => setNewContactName(e.target.value)} placeholder="Ej. Mi mamá" maxLength={80} />
+            </div>
+            <div>
+              <Label>Teléfono</Label>
+              <Input required value={newContactPhone} onChange={(e) => setNewContactPhone(e.target.value)} placeholder="10 dígitos" maxLength={20} />
+            </div>
+            {contactsError && <p className="text-xs text-red-600">{contactsError}</p>}
+            <Button type="submit" variant="brand" className="w-full" loading={savingContact} disabled={!newContactName.trim() || !newContactPhone.trim()}>
+              Agregar contacto
+            </Button>
+          </form>
+        </Modal>
+
+        <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Ayuda">
+          <div className="space-y-2">
+            {HELP_FAQS.map((faq, i) => (
+              <div key={faq.q} className="rounded-xl border border-ink-100">
+                <button
+                  type="button"
+                  onClick={() => setHelpFaqOpen(helpFaqOpen === i ? null : i)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-ink-900"
+                >
+                  {faq.q}
+                  <ChevronDown className={`h-4 w-4 shrink-0 text-ink-400 transition-transform ${helpFaqOpen === i ? 'rotate-180' : ''}`} />
+                </button>
+                {helpFaqOpen === i && <p className="px-3 pb-2.5 text-xs text-ink-600">{faq.a}</p>}
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs text-ink-400">¿Sigues con dudas? Escríbele al operador por el chat durante tu viaje.</p>
+        </Modal>
+
         {scheduledTrip && (
           <Card className="animate-fade-in-up">
             <div className="flex items-center gap-3">
@@ -1076,9 +1261,15 @@ export default function PassengerHome() {
               routeGeometry={activeTrip.routeGeometry}
               height={MAP_HEIGHT}
               myLocation={gpsOrigin}
+              defaultCenter={defaultCenter}
             />
 
             <Card>
+              {etaToPickupMin != null && (
+                <p className="mb-3 text-center text-lg font-bold text-ink-900">
+                  Encuentro en <span className="text-brand-700">{etaToPickupMin} min</span>
+                </p>
+              )}
               <div className="mb-4">
                 <TripStatusStepper status={activeTrip.status} />
               </div>
@@ -1094,16 +1285,25 @@ export default function PassengerHome() {
               </p>
 
               {activeTrip.status === 'ACCEPTED' && verificationCode && (
-                <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-50 px-3 py-2.5 text-amber-900">
-                  <span className="flex items-center gap-2 text-xs font-medium text-brand-800">
-                    <KeyRound className="h-3.5 w-3.5 shrink-0" /> Dile este código al operador al subir
-                  </span>
-                  <span className="text-lg font-bold tracking-[0.3em] text-brand-900">{verificationCode}</span>
+                <div className="mt-4 rounded-2xl bg-brand-50 px-4 py-3 text-center">
+                  <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-brand-800">
+                    <KeyRound className="h-3.5 w-3.5" /> PIN de este viaje · dilo al operador al subir
+                  </p>
+                  <div className="mt-2 flex items-center justify-center gap-1.5">
+                    {verificationCode.split('').map((digit, i) => (
+                      <span
+                        key={i}
+                        className="flex h-10 w-9 items-center justify-center rounded-lg bg-white text-xl font-extrabold text-brand-900 shadow-sm"
+                      >
+                        {digit}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {activeTrip.paymentMethod === 'TRANSFER' && activeTrip.driverBankAccount && (
-                <div className="mt-2 flex items-center gap-2 rounded-xl bg-ink-50 px-3 py-2.5 text-xs text-ink-700">
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-ink-50 px-3 py-2.5 text-xs text-ink-700">
                   <CreditCard className="h-3.5 w-3.5 shrink-0 text-ink-400" />
                   <span>
                     Cuenta/CLABE del operador: <span className="font-semibold">{activeTrip.driverBankAccount}</span>
@@ -1112,74 +1312,201 @@ export default function PassengerHome() {
               )}
 
               {activeTrip.driverName && (
-                <button
-                  type="button"
-                  onClick={() => setReportTripId(activeTrip.id)}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
-                >
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Reportar un problema
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleShareTrip}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
-              >
-                <Share2 className="h-3.5 w-3.5" />
-                {shareCopied ? 'Enlace copiado' : 'Compartir viaje'}
-              </button>
-
-              {activeTrip.driverName && (
-                <div className="mt-4 flex items-center gap-3 rounded-xl bg-ink-50 p-3">
-                  {activeTrip.driverPhotoUrl ? (
-                    <img src={`${API_URL}${activeTrip.driverPhotoUrl}`} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
-                  ) : (
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ink-900 text-sm font-bold text-white">
-                      {activeTrip.driverName.charAt(0)}
-                    </span>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-ink-900">{activeTrip.driverName}</p>
-                    <p className="flex items-center gap-1 text-xs text-ink-500">
-                      <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" /> {activeTrip.driverRating} &middot; Taxi{' '}
-                      {activeTrip.taxiUnitNumber} ({activeTrip.taxiPlates})
-                      {(activeTrip.taxiBrand || activeTrip.taxiModel) &&
-                        ` · ${[activeTrip.taxiBrand, activeTrip.taxiModel].filter(Boolean).join(' ')}`}
-                    </p>
+                <div className="mt-4 rounded-xl bg-ink-50 p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex shrink-0 -space-x-3">
+                      {activeTrip.taxiPhotoUrl && (
+                        <img
+                          src={`${API_URL}${activeTrip.taxiPhotoUrl}`}
+                          alt=""
+                          className="h-12 w-12 rounded-xl border-2 border-ink-50 object-cover"
+                        />
+                      )}
+                      {activeTrip.driverPhotoUrl ? (
+                        <img src={`${API_URL}${activeTrip.driverPhotoUrl}`} alt="" className="h-12 w-12 rounded-full border-2 border-ink-50 object-cover" />
+                      ) : (
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-ink-50 bg-ink-900 text-sm font-bold text-white">
+                          {activeTrip.driverName.charAt(0)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-extrabold tracking-wide text-ink-900">{activeTrip.taxiPlates}</p>
+                      <p className="truncate text-xs text-ink-500">
+                        {[activeTrip.taxiBrand, activeTrip.taxiModel].filter(Boolean).join(' ') || `Unidad ${activeTrip.taxiUnitNumber}`}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {activeTrip.driverPhone && (
+                        <a
+                          href={`tel:${activeTrip.driverPhone}`}
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm hover:bg-ink-100"
+                          aria-label="Llamar al operador"
+                        >
+                          <Phone className="h-4 w-4" />
+                        </a>
+                      )}
+                      {chatEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChatOpen(true)
+                            markAllRead()
+                          }}
+                          className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm hover:bg-ink-100"
+                          aria-label="Chatear con el operador"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          {chatUnread > 0 && (
+                            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                              {chatUnread}
+                            </span>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {activeTrip.driverPhone && (
-                      <a
-                        href={`tel:${activeTrip.driverPhone}`}
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm hover:bg-ink-100"
-                        aria-label="Llamar al operador"
-                      >
-                        <Phone className="h-4 w-4" />
-                      </a>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3 text-xs text-ink-600">
+                    <span className="font-semibold text-ink-900">{activeTrip.driverName}</span>
+                    <span className="flex items-center gap-1">
+                      <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" /> {activeTrip.driverRating}
+                    </span>
+                    {activeTrip.driverTripsCompleted > 0 && (
+                      <>
+                        <span className="text-ink-400">&middot;</span>
+                        <span>Más de {activeTrip.driverTripsCompleted} viajes</span>
+                      </>
                     )}
-                    {chatEnabled && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setChatOpen(true)
-                          markAllRead()
-                        }}
-                        className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm hover:bg-ink-100"
-                        aria-label="Chatear con el operador"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                        {chatUnread > 0 && (
-                          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
-                            {chatUnread}
-                          </span>
-                        )}
-                      </button>
-                    )}
+                    {activeTrip.driverExcellent && <Badge tone="warning">Conductor excelente</Badge>}
+                    <span className="text-ink-400">&middot;</span>
+                    <span>Unidad {activeTrip.taxiUnitNumber}</span>
                   </div>
                 </div>
               )}
+
+              {(activeTrip.originAddress || activeTrip.destinationAddress) && (
+                <div className="mt-3 space-y-2 rounded-xl border border-ink-100 p-3 text-xs">
+                  {activeTrip.originAddress && (
+                    <div className="flex items-start gap-2 text-ink-700">
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                      <span className="min-w-0 flex-1 truncate">{activeTrip.originAddress}</span>
+                      {activeTrip.status !== 'IN_PROGRESS' && (
+                        <button
+                          type="button"
+                          onClick={() => startEditStop('origin')}
+                          className="flex shrink-0 items-center gap-1 text-ink-400 hover:text-brand-700"
+                        >
+                          <Pencil className="h-3 w-3" /> Editar
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {editingStop === 'origin' && (
+                    <div className="rounded-lg bg-ink-50 p-2">
+                      <AddressAutocomplete
+                        autoFocus
+                        placeholder="Nueva dirección de origen..."
+                        value={editQuery}
+                        onChange={setEditQuery}
+                        onSelect={handleEditStopSelect}
+                        near={{ lat: activeTrip.originLat, lng: activeTrip.originLng }}
+                      />
+                      {editSearching && <p className="mt-1 text-[11px] text-ink-400">Guardando...</p>}
+                      {editError && <p className="mt-1 text-[11px] text-red-600">{editError}</p>}
+                      <button type="button" onClick={() => setEditingStop(null)} className="mt-1 text-[11px] font-semibold text-ink-500 hover:underline">
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
+                  {activeTrip.destinationAddress && (
+                    <div className="flex items-start gap-2 text-ink-700">
+                      <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <span className="min-w-0 flex-1 truncate">{activeTrip.destinationAddress}</span>
+                      <button
+                        type="button"
+                        onClick={() => startEditStop('destination')}
+                        className="flex shrink-0 items-center gap-1 text-ink-400 hover:text-brand-700"
+                      >
+                        <Pencil className="h-3 w-3" /> Editar
+                      </button>
+                    </div>
+                  )}
+                  {editingStop === 'destination' && (
+                    <div className="rounded-lg bg-ink-50 p-2">
+                      <AddressAutocomplete
+                        autoFocus
+                        placeholder="Nueva dirección de destino..."
+                        value={editQuery}
+                        onChange={setEditQuery}
+                        onSelect={handleEditStopSelect}
+                        near={{ lat: activeTrip.originLat, lng: activeTrip.originLng }}
+                      />
+                      {editSearching && <p className="mt-1 text-[11px] text-ink-400">Guardando...</p>}
+                      {editError && <p className="mt-1 text-[11px] text-red-600">{editError}</p>}
+                      <button type="button" onClick={() => setEditingStop(null)} className="mt-1 text-[11px] font-semibold text-ink-500 hover:underline">
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTrip.driverName && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleShareTrip}
+                    className="flex flex-col items-center gap-1 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    {shareCopied ? 'Enlace copiado' : 'Compartir viaje'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportTripId(activeTrip.id)}
+                    className="flex flex-col items-center gap-1 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    Reportar un problema
+                  </button>
+                  <a
+                    href="tel:911"
+                    className="flex flex-col items-center gap-1 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+                  >
+                    <Siren className="h-4 w-4" />
+                    Llamar al 911
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setHelpOpen(true)}
+                    className="flex flex-col items-center gap-1 rounded-xl border border-ink-200 py-2.5 text-xs font-semibold text-ink-600 hover:bg-ink-50"
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                    Ayuda
+                  </button>
+                </div>
+              )}
+
+              {trustedContacts.length > 0 && (
+                <div className="mt-3 rounded-xl border border-ink-100 p-3">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-ink-700">
+                    <Users className="h-3.5 w-3.5" /> Avisar a un contacto de confianza
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {trustedContacts.map((contact) => (
+                      <button
+                        key={contact.id}
+                        type="button"
+                        onClick={() => handleShareWithContact(contact)}
+                        className="rounded-full border border-ink-200 px-3 py-1.5 text-xs font-medium text-ink-600 hover:bg-ink-50"
+                      >
+                        {contact.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {activeTrip.driverName && (
                 <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
                   <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />

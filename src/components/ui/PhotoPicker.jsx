@@ -5,7 +5,7 @@ import { Camera, User } from 'lucide-react'
  * Selector de foto: en celular, el atributo "capture" ofrece abrir la camara directamente (el
  * usuario tambien puede elegir de su galeria - el navegador decide como presentar la opcion).
  */
-export default function PhotoPicker({ value, onChange, existingUrl, size = 96, rounded = 'rounded-full' }) {
+export default function PhotoPicker({ value, onChange, existingUrl, size = 96, rounded = 'rounded-full', required = false }) {
   const inputRef = useRef(null)
 
   const previewUrl = useMemo(() => {
@@ -19,7 +19,9 @@ export default function PhotoPicker({ value, onChange, existingUrl, size = 96, r
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className={`flex h-full w-full items-center justify-center overflow-hidden border-2 border-dashed border-ink-200 bg-ink-50 text-ink-300 ${rounded}`}
+          className={`flex h-full w-full items-center justify-center overflow-hidden border-2 border-dashed bg-ink-50 text-ink-300 ${
+            required && !previewUrl ? 'border-red-300' : 'border-ink-200'
+          } ${rounded}`}
         >
           {previewUrl ? (
             <img src={previewUrl} alt="" className="h-full w-full object-cover" />
@@ -32,7 +34,9 @@ export default function PhotoPicker({ value, onChange, existingUrl, size = 96, r
         </span>
       </div>
       <div className="text-xs text-ink-500">
-        <p className="font-medium text-ink-700">Foto de perfil</p>
+        <p className="font-medium text-ink-700">
+          Foto de perfil {required && <span className="font-normal text-red-500">(obligatoria)</span>}
+        </p>
         <p>Toca el círculo para tomar una foto o subir una desde tu galería.</p>
       </div>
       <input

@@ -1071,7 +1071,16 @@ export default function DriverHome() {
                   )}
                 </div>
               </div>
-              <p className="mt-2 truncate text-xs text-ink-400">{activeTrip.originAddress} → {activeTrip.destinationAddress}</p>
+              <div className="mt-3 space-y-2 rounded-xl border border-ink-100 p-3 text-xs">
+                <p className="flex items-start gap-2 text-ink-700">
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  <span className="truncate">{activeTrip.originAddress}</span>
+                </p>
+                <p className="flex items-start gap-2 text-ink-700">
+                  <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+                  <span className="truncate">{activeTrip.destinationAddress}</span>
+                </p>
+              </div>
               {(activeTrip.babySeat || activeTrip.moreThanFourPassengers || activeTrip.hasPet || activeTrip.specialComments) && (
                 <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
                   {activeTrip.babySeat && (
