@@ -6,6 +6,10 @@
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
 
+/* El modo oscuro se activa con la clase .dark en <html> (ver ThemeContext), no con
+   prefers-color-scheme directo - asi el usuario puede elegirlo manualmente y queda guardado. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-display: "Manrope", "Inter", system-ui, sans-serif;
@@ -32,6 +36,40 @@
   --color-ink-800: #262c3d;
   --color-ink-900: #14171f;
   --color-ink-950: #0b0d13;
+
+  /* Superficie "elevada" (tarjetas, modales, inputs, header) - en claro es blanco puro; en oscuro
+     toma su propio valor (ver bloque .dark mas abajo) en vez de depender de la escala ink. */
+  --color-surface: #ffffff;
+
+  /* Fijos: avatares, botones primarios, chips y el panel de marca (BrandPanel) que SIEMPRE deben
+     verse "oscuros" (con texto blanco/gris claro encima), sin importar el tema activo - por eso
+     no se invierten en modo oscuro como el resto de la escala ink. */
+  --color-night-200: #d7dbe3;
+  --color-night-300: #b4bbc9;
+  --color-night-700: #414960;
+  --color-night-800: #262c3d;
+  --color-night-900: #14171f;
+  --color-night-950: #0b0d13;
+}
+
+/* Inversion de la escala ink para modo oscuro: mismo nombre de clase (ej. bg-ink-50,
+   text-ink-900), pero cada token toma el valor de su "opuesto" en la escala, para que el rol
+   semantico (fondo de pagina, texto principal, bordes sutiles...) se mantenga igual en ambos
+   temas sin tener que tocar cada componente uno por uno. */
+:root.dark {
+  --color-ink-50: #0b0d13;
+  --color-ink-100: #14171f;
+  --color-ink-200: #262c3d;
+  --color-ink-300: #414960;
+  --color-ink-400: #545e76;
+  --color-ink-500: #6b7690;
+  --color-ink-600: #8a94a8;
+  --color-ink-700: #b4bbc9;
+  --color-ink-800: #d7dbe3;
+  --color-ink-900: #eceef2;
+  --color-ink-950: #f6f7f9;
+
+  --color-surface: #1b2030;
 }
 
 html,
@@ -52,6 +90,7 @@ body {
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* iOS Safari hace zoom automatico al enfocar un input con font-size menor a 16px. */

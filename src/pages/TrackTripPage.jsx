@@ -80,14 +80,14 @@ export default function TrackTripPage() {
           <TripStatusStepper status={trip.status} />
 
           {trip.status === 'COMPLETED' && (
-            <div className="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+            <div className="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
               Tu conocido llegó a su destino de forma segura.
             </div>
           )}
 
           {trip.hasReport && (
-            <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+            <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               Se reportó un problema en este viaje. Un administrador lo está revisando.
             </div>
@@ -108,7 +108,7 @@ export default function TrackTripPage() {
 
           {trip.driverName && (
             <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink-900 text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-night-900 text-white">
                 <Car className="h-5 w-5" />
               </div>
               <div>

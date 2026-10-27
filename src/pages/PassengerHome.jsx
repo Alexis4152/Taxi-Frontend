@@ -133,7 +133,7 @@ function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onU
           {profile.photoUrl ? (
             <img src={`${API_URL}${profile.photoUrl}`} alt="" className="h-20 w-20 rounded-full object-cover" />
           ) : (
-            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-ink-900 text-2xl font-bold text-white">
+            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-night-900 text-2xl font-bold text-white">
               {profile.name.charAt(0).toUpperCase()}
             </span>
           )}
@@ -142,7 +142,7 @@ function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onU
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingPhoto}
             aria-label="Cambiar foto de perfil"
-            className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-ink-900 text-white shadow-sm hover:bg-ink-700 disabled:opacity-60"
+            className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-night-900 text-white shadow-sm hover:bg-night-700 disabled:opacity-60"
           >
             {uploadingPhoto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
           </button>
@@ -191,7 +191,7 @@ function ProfileSidebar({ profile, totalTrips, onOpenRatings, onOpenHistory, onU
       <button
         type="button"
         onClick={onRequestDeletion}
-        className="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+        className="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
       >
         Eliminar mi cuenta
       </button>
@@ -871,7 +871,7 @@ export default function PassengerHome() {
       <div className="space-y-5">
         <NotificationPermissionBanner permission={notifPermission} onRequest={requestNotifPermission} />
         {!activeTrip && !finishedTrip && !scheduledTrip && !noDriversTrip && showWelcome && (
-          <div className="relative animate-fade-in-up rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3.5 text-ink-800">
+          <div className="relative animate-fade-in-up rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3.5 text-ink-800 dark:border-brand-500/30 dark:bg-brand-500/10">
             <button onClick={() => setShowWelcome(false)} className="absolute right-3 top-3 text-ink-400 hover:text-ink-600">
               <X className="h-4 w-4" />
             </button>
@@ -881,7 +881,7 @@ export default function PassengerHome() {
         )}
 
         {geoError && (
-          <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             {geoError}
           </div>
@@ -922,7 +922,7 @@ export default function PassengerHome() {
                 type="button"
                 onClick={() => setPickingField('origin')}
                 className={`flex items-center justify-center gap-1.5 rounded-xl border-2 py-2 text-xs font-semibold transition ${
-                  pickingField === 'origin' ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                  pickingField === 'origin' ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300' : 'border-ink-100 text-ink-500 hover:border-ink-200'
                 }`}
               >
                 <MapPin className="h-3.5 w-3.5" /> ¿Dónde tomarás el taxi?
@@ -931,7 +931,7 @@ export default function PassengerHome() {
                 type="button"
                 onClick={() => setPickingField('destination')}
                 className={`flex items-center justify-center gap-1.5 rounded-xl border-2 py-2 text-xs font-semibold transition ${
-                  pickingField === 'destination' ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                  pickingField === 'destination' ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300' : 'border-ink-100 text-ink-500 hover:border-ink-200'
                 }`}
               >
                 <Flag className="h-3.5 w-3.5" /> Elegir destino en el mapa
@@ -996,7 +996,7 @@ export default function PassengerHome() {
                     return (
                       <span
                         key={place.id}
-                        className="group flex items-center gap-1 rounded-full border border-ink-200 bg-white py-1 pl-1 pr-2 text-xs font-medium text-ink-700"
+                        className="group flex items-center gap-1 rounded-full border border-ink-200 bg-surface py-1 pl-1 pr-2 text-xs font-medium text-ink-700"
                       >
                         <button
                           type="button"
@@ -1039,7 +1039,7 @@ export default function PassengerHome() {
                         type="button"
                         onClick={() => setPaymentMethod(value)}
                         className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-semibold transition ${
-                          paymentMethod === value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                          paymentMethod === value ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300' : 'border-ink-100 text-ink-500 hover:border-ink-200'
                         }`}
                       >
                         <Icon className="h-4 w-4" />
@@ -1055,7 +1055,7 @@ export default function PassengerHome() {
                       type="button"
                       onClick={() => setIsScheduling(false)}
                       className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-semibold transition ${
-                        !isScheduling ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                        !isScheduling ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300' : 'border-ink-100 text-ink-500 hover:border-ink-200'
                       }`}
                     >
                       <Navigation className="h-4 w-4" /> Ahora
@@ -1064,7 +1064,7 @@ export default function PassengerHome() {
                       type="button"
                       onClick={() => setIsScheduling(true)}
                       className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-semibold transition ${
-                        isScheduling ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                        isScheduling ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300' : 'border-ink-100 text-ink-500 hover:border-ink-200'
                       }`}
                     >
                       <CalendarClock className="h-4 w-4" /> Programar
@@ -1135,7 +1135,7 @@ export default function PassengerHome() {
                 type="button"
                 onClick={() => setNewPlaceLabel(preset)}
                 className={`rounded-xl border-2 px-3 py-1.5 text-xs font-semibold transition ${
-                  newPlaceLabel === preset ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                  newPlaceLabel === preset ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300' : 'border-ink-100 text-ink-500 hover:border-ink-200'
                 }`}
               >
                 {preset}
@@ -1217,7 +1217,7 @@ export default function PassengerHome() {
         {scheduledTrip && (
           <Card className="animate-fade-in-up">
             <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-800">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300">
                 <CalendarClock className="h-5 w-5" />
               </span>
               <div className="min-w-0 flex-1">
@@ -1285,15 +1285,15 @@ export default function PassengerHome() {
               </p>
 
               {activeTrip.status === 'ACCEPTED' && verificationCode && (
-                <div className="mt-4 rounded-2xl bg-brand-50 px-4 py-3 text-center">
-                  <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-brand-800">
+                <div className="mt-4 rounded-2xl bg-brand-50 px-4 py-3 text-center dark:bg-brand-500/10">
+                  <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-brand-800 dark:text-brand-300">
                     <KeyRound className="h-3.5 w-3.5" /> PIN de este viaje · dilo al operador al subir
                   </p>
                   <div className="mt-2 flex items-center justify-center gap-1.5">
                     {verificationCode.split('').map((digit, i) => (
                       <span
                         key={i}
-                        className="flex h-10 w-9 items-center justify-center rounded-lg bg-white text-xl font-extrabold text-brand-900 shadow-sm"
+                        className="flex h-10 w-9 items-center justify-center rounded-lg bg-surface text-xl font-extrabold text-brand-900 shadow-sm dark:text-brand-300"
                       >
                         {digit}
                       </span>
@@ -1325,7 +1325,7 @@ export default function PassengerHome() {
                       {activeTrip.driverPhotoUrl ? (
                         <img src={`${API_URL}${activeTrip.driverPhotoUrl}`} alt="" className="h-12 w-12 rounded-full border-2 border-ink-50 object-cover" />
                       ) : (
-                        <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-ink-50 bg-ink-900 text-sm font-bold text-white">
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-ink-50 bg-night-900 text-sm font-bold text-white">
                           {activeTrip.driverName.charAt(0)}
                         </span>
                       )}
@@ -1340,7 +1340,7 @@ export default function PassengerHome() {
                       {activeTrip.driverPhone && (
                         <a
                           href={`tel:${activeTrip.driverPhone}`}
-                          className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm hover:bg-ink-100"
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-ink-600 shadow-sm hover:bg-ink-100"
                           aria-label="Llamar al operador"
                         >
                           <Phone className="h-4 w-4" />
@@ -1353,7 +1353,7 @@ export default function PassengerHome() {
                             setChatOpen(true)
                             markAllRead()
                           }}
-                          className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm hover:bg-ink-100"
+                          className="relative flex h-9 w-9 items-center justify-center rounded-full bg-surface text-ink-600 shadow-sm hover:bg-ink-100"
                           aria-label="Chatear con el operador"
                         >
                           <MessageCircle className="h-4 w-4" />
@@ -1508,7 +1508,7 @@ export default function PassengerHome() {
               )}
 
               {activeTrip.driverName && (
-                <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
                   <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     Antes de subir, verifica que coincidan el <strong>nombre</strong>, la <strong>foto</strong> del operador y el{' '}

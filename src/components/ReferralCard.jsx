@@ -48,7 +48,7 @@ export default function ReferralCard() {
         <button
           type="button"
           onClick={handleShare}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-ink-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-ink-700"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-night-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-night-700"
         >
           <Share2 className="h-3.5 w-3.5" /> {copied ? 'Copiado' : 'Compartir'}
         </button>

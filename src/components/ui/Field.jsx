@@ -12,7 +12,7 @@ export function Input({ icon: Icon, endAdornment, className = '', ...props }) {
     <div className="relative">
       {Icon && <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />}
       <input
-        className={`w-full rounded-xl border border-ink-200 bg-white py-2.5 text-base text-ink-900 placeholder:text-ink-400 transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 ${
+        className={`w-full rounded-xl border border-ink-200 bg-surface py-2.5 text-base text-ink-900 placeholder:text-ink-400 transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 ${
           Icon ? 'pl-10' : 'pl-3'
         } ${endAdornment ? 'pr-10' : 'pr-3'} ${className}`}
         {...props}
@@ -25,7 +25,7 @@ export function Input({ icon: Icon, endAdornment, className = '', ...props }) {
 export function Select({ className = '', children, ...props }) {
   return (
     <select
-      className={`w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-base text-ink-900 transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 ${className}`}
+      className={`w-full rounded-xl border border-ink-200 bg-surface px-3 py-2.5 text-base text-ink-900 transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 ${className}`}
       {...props}
     >
       {children}
@@ -36,7 +36,7 @@ export function Select({ className = '', children, ...props }) {
 export function Textarea({ className = '', ...props }) {
   return (
     <textarea
-      className={`w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-base text-ink-900 placeholder:text-ink-400 transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 ${className}`}
+      className={`w-full rounded-xl border border-ink-200 bg-surface px-3 py-2.5 text-base text-ink-900 placeholder:text-ink-400 transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 ${className}`}
       {...props}
     />
   )

@@ -14,8 +14,8 @@ export default function NotificationPermissionBanner({ permission, onRequest }) 
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-ink-800">
-      <Bell className="h-4 w-4 shrink-0 text-brand-700" />
+    <div className="flex items-center gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-ink-800 dark:border-brand-500/30 dark:bg-brand-500/10">
+      <Bell className="h-4 w-4 shrink-0 text-brand-700 dark:text-brand-400" />
       <p className="flex-1 text-xs">Activa las notificaciones para enterarte aunque no tengas esta pestaña abierta.</p>
       <button
         type="button"

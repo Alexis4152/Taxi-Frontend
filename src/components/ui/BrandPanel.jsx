@@ -10,7 +10,7 @@ const FEATURES = [
 
 export default function BrandPanel({ eyebrow = 'Tu taxi, sin complicaciones', title, description }) {
   return (
-    <div className="relative hidden overflow-hidden bg-ink-950 px-10 py-12 text-white lg:flex lg:w-[44%] lg:flex-col lg:justify-between">
+    <div className="relative hidden overflow-hidden bg-night-950 px-10 py-12 text-white lg:flex lg:w-[44%] lg:flex-col lg:justify-between">
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.07]"
         style={{
@@ -25,12 +25,12 @@ export default function BrandPanel({ eyebrow = 'Tu taxi, sin complicaciones', ti
         <Logo size={40} variant="dark" />
         <p className="mt-10 text-xs font-semibold uppercase tracking-[0.16em] text-brand-400">{eyebrow}</p>
         <h1 className="mt-3 max-w-sm font-display text-3xl font-extrabold leading-tight">{title}</h1>
-        <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-300">{description}</p>
+        <p className="mt-4 max-w-sm text-sm leading-relaxed text-night-300">{description}</p>
       </div>
 
       <ul className="relative space-y-4">
         {FEATURES.map(({ icon: Icon, text }) => (
-          <li key={text} className="flex items-center gap-3 text-sm text-ink-200">
+          <li key={text} className="flex items-center gap-3 text-sm text-night-200">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
               <Icon className="h-4.5 w-4.5 text-brand-400" />
             </span>

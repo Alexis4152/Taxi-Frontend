@@ -155,7 +155,7 @@ export default function MapLibreView({
           onClick={handleRecenter}
           aria-label="Ir a mi ubicación"
           title="Ir a mi ubicación"
-          className="absolute bottom-3 left-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white text-ink-700 shadow-md hover:bg-ink-50"
+          className="absolute bottom-3 left-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink-700 shadow-md hover:bg-ink-50"
         >
           <LocateFixed className="h-4.5 w-4.5" />
         </button>

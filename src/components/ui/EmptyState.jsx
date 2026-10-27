@@ -7,7 +7,7 @@ export default function EmptyState({ icon: Icon, illustration, title, descriptio
         <Illustration name={illustration} className="mb-3 h-28 w-28" />
       ) : (
         Icon && (
-          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-400 shadow-sm">
+          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface text-ink-400 shadow-sm">
             <Icon className="h-5.5 w-5.5" />
           </span>
         )

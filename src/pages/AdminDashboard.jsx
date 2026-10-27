@@ -93,13 +93,13 @@ export default function AdminDashboard() {
   }
 
   const sidebar = (
-    <nav className="space-y-1 rounded-2xl border border-ink-100 bg-white p-2 shadow-sm shadow-ink-900/[0.02] lg:sticky lg:top-20">
+    <nav className="space-y-1 rounded-2xl border border-ink-100 bg-surface p-2 shadow-sm shadow-ink-900/[0.02] lg:sticky lg:top-20">
       {nav.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
           onClick={() => handleSetTab(key)}
           className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-            tab === key ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+            tab === key ? 'bg-night-900 text-white' : 'text-ink-600 hover:bg-ink-50'
           }`}
         >
           <Icon className="h-4.5 w-4.5" />
@@ -141,7 +141,10 @@ export default function AdminDashboard() {
 }
 
 function AlertBox({ tone = 'danger', children }) {
-  const styles = tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+  const styles =
+    tone === 'danger'
+      ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400'
+      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
   const Icon = tone === 'danger' ? AlertCircle : CheckCircle2
   return (
     <div className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs ${styles}`}>
@@ -182,7 +185,7 @@ function RowActions({ active, pendingDeletion, onEdit, onToggleActive, onRequest
   return (
     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
       {onEdit && (
-        <button type="button" title="Modificar" onClick={onEdit} className={`${iconActionClass} bg-blue-50 text-blue-600 hover:bg-blue-100`}>
+        <button type="button" title="Modificar" onClick={onEdit} className={`${iconActionClass} bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-500/15 dark:text-blue-400 dark:hover:bg-blue-500/25`}>
           <Pencil className="h-4 w-4" />
         </button>
       )}
@@ -191,22 +194,22 @@ function RowActions({ active, pendingDeletion, onEdit, onToggleActive, onRequest
         title={pendingDeletion ? 'Bloquear/desbloquear (deshabilitado)' : active ? 'Bloquear' : 'Desbloquear'}
         onClick={pendingDeletion ? undefined : onToggleActive}
         disabled={pendingDeletion}
-        className={`${iconActionClass} ${pendingDeletion ? 'cursor-not-allowed bg-ink-50 text-ink-300' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}
+        className={`${iconActionClass} ${pendingDeletion ? 'cursor-not-allowed bg-ink-50 text-ink-300' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25'}`}
       >
         <AlertTriangle className="h-4 w-4" />
       </button>
       {!hideDelete &&
         (pendingDeletion ? (
           <>
-            <button type="button" title="Cancelar eliminación" onClick={onCancelDelete} className={`${iconActionClass} bg-amber-50 text-amber-600 hover:bg-amber-100`}>
+            <button type="button" title="Cancelar eliminación" onClick={onCancelDelete} className={`${iconActionClass} bg-amber-50 text-amber-600 hover:bg-amber-100 dark:bg-amber-500/15 dark:text-amber-400 dark:hover:bg-amber-500/25`}>
               <RotateCcw className="h-4 w-4" />
             </button>
-            <button type="button" title="Eliminar definitivamente" onClick={onDeleteForever} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100`}>
+            <button type="button" title="Eliminar definitivamente" onClick={onDeleteForever} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25`}>
               <Trash2 className="h-4 w-4" />
             </button>
           </>
         ) : (
-          <button type="button" title="Eliminar" onClick={onRequestDelete} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100`}>
+          <button type="button" title="Eliminar" onClick={onRequestDelete} className={`${iconActionClass} bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25`}>
             <Trash2 className="h-4 w-4" />
           </button>
         ))}
@@ -969,7 +972,7 @@ function DriversSection({ orgId, isSuperAdmin }) {
           type="button"
           onClick={() => setViewMode('all')}
           className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-            viewMode === 'all' ? 'bg-ink-900 text-white' : 'border border-ink-200 text-ink-600 hover:bg-ink-50'
+            viewMode === 'all' ? 'bg-night-900 text-white' : 'border border-ink-200 text-ink-600 hover:bg-ink-50'
           }`}
         >
           Todos
@@ -978,7 +981,7 @@ function DriversSection({ orgId, isSuperAdmin }) {
           type="button"
           onClick={() => setViewMode('pending-payment')}
           className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-            viewMode === 'pending-payment' ? 'bg-ink-900 text-white' : 'border border-ink-200 text-ink-600 hover:bg-ink-50'
+            viewMode === 'pending-payment' ? 'bg-night-900 text-white' : 'border border-ink-200 text-ink-600 hover:bg-ink-50'
           }`}
         >
           Pendientes de pago {pendingPaymentDrivers.length > 0 && `(${pendingPaymentDrivers.length})`}
@@ -1018,7 +1021,7 @@ function DriversSection({ orgId, isSuperAdmin }) {
                         e.stopPropagation()
                         handleMarkPaidInList(d)
                       }}
-                      className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                      className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/30 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
                     >
                       Confirmar pago
                     </button>
@@ -1055,7 +1058,7 @@ function DriversSection({ orgId, isSuperAdmin }) {
               <ListRow
                 key={d.driverId}
                 onClick={() => openDetail(d.driverId)}
-                className={lowRated ? 'border-l-4 border-l-red-400 bg-red-50/60' : ''}
+                className={lowRated ? 'border-l-4 border-l-red-400 bg-red-50/60 dark:bg-red-500/10' : ''}
                 avatar={<Avatar url={d.photoUrl} fallback={d.name.charAt(0)} />}
                 title={d.name}
                 subtitle={
@@ -1216,7 +1219,7 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
       <ConfirmDialogElement />
       <RatingsModal open={ratingsOpen} onClose={() => setRatingsOpen(false)} ratings={ratings} loading={ratingsLoading} title={`Calificaciones de ${driver.name}`} />
       {currentTrip && (
-        <div className="mb-4 space-y-2 rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs">
+        <div className="mb-4 space-y-2 rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs dark:border-brand-500/30 dark:bg-brand-500/10">
           <div className="flex items-center justify-between">
             <p className="font-semibold text-ink-900">Viaje actual</p>
             <Badge tone={currentTrip.status === 'IN_PROGRESS' ? 'success' : 'info'}>
@@ -1245,10 +1248,19 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
         </div>
       )}
       {Number(driver.pendingAmount) > 0 && (
-        <div className={`mb-4 rounded-xl border p-3 text-xs ${driver.paymentBlocked ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+        <div
+          className={`mb-4 rounded-xl border p-3 text-xs ${
+            driver.paymentBlocked
+              ? 'border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10'
+              : 'border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <p className="font-semibold text-ink-900">
-              Saldo pendiente: <span className={driver.paymentBlocked ? 'text-red-700' : 'text-amber-800'}>${driver.pendingAmount} MXN</span>
+              Saldo pendiente:{' '}
+              <span className={driver.paymentBlocked ? 'text-red-700 dark:text-red-400' : 'text-amber-800 dark:text-amber-400'}>
+                ${driver.pendingAmount} MXN
+              </span>
             </p>
             {driver.paymentBlocked && <Badge tone="danger">Bloqueado</Badge>}
           </div>
@@ -1290,14 +1302,16 @@ function DriverDetailModal({ driverId, tripsToday, onClose, onSaved }) {
           type="button"
           onClick={openRatings}
           className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs transition hover:opacity-80 ${
-            driver.ratingCount > 0 && driver.ratingAvg < 4.3 ? 'bg-red-50 text-red-700' : 'bg-ink-50 text-ink-600'
+            driver.ratingCount > 0 && driver.ratingAvg < 4.3
+              ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400'
+              : 'bg-ink-50 text-ink-600'
           }`}
         >
           <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
           {driver.ratingAvg} de calificación promedio ({driver.ratingCount} viajes calificados) · ver comentarios
         </button>
         {tripsToday !== null && tripsToday !== undefined && (
-          <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
             <CheckCircle2 className="h-3.5 w-3.5" />
             {tripsToday} viajes completados hoy en su turno
           </div>
@@ -1946,7 +1960,7 @@ function TripReportDetailModal({ report, onClose, onResolved }) {
             </Button>
           </div>
         ) : (
-          <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+          <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400">
             <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-600">
               <CheckCircle2 className="h-3.5 w-3.5" /> Resuelto por {report.resolvedByName}
               {report.resolvedAt && ` · ${new Date(report.resolvedAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}`}
@@ -1996,7 +2010,9 @@ function TripReportsSection() {
             type="button"
             onClick={() => setTab(opt.value)}
             className={`flex min-h-10 items-center justify-center rounded-xl border-2 text-sm font-semibold transition ${
-              tab === opt.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+              tab === opt.value
+                ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300'
+                : 'border-ink-100 text-ink-500 hover:border-ink-200'
             }`}
           >
             {opt.label}
@@ -2031,7 +2047,9 @@ function TripReportsSection() {
               avatar={
                 <span
                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                    isPendingTab ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'
+                    isPendingTab
+                      ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+                      : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
                   }`}
                 >
                   <AlertTriangle className="h-4.5 w-4.5" />
@@ -2514,7 +2532,7 @@ function LiveMapSection() {
                 d.photoUrl ? (
                   <img src={photoSrc(d.photoUrl)} alt="" className="h-10 w-10 rounded-full object-cover" />
                 ) : (
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-ink-900 text-sm font-bold text-white">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-night-900 text-sm font-bold text-white">
                     {d.name.charAt(0)}
                   </span>
                 )
@@ -2556,7 +2574,7 @@ function LiveMapSection() {
               <span className="font-semibold">Estatus:</span> {selected.onTrip ? 'En viaje' : 'Disponible'}
             </p>
             {selectedTrip && (
-              <div className="mt-2 space-y-2 rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs">
+              <div className="mt-2 space-y-2 rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs dark:border-brand-500/30 dark:bg-brand-500/10">
                 <div className="flex items-start gap-2 text-ink-700">
                   <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-400" />
                   {selectedTrip.originAddress}

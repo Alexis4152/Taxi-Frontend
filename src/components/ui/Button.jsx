@@ -1,11 +1,11 @@
 import { Loader2 } from 'lucide-react'
 
 const VARIANTS = {
-  primary: 'bg-ink-900 text-white shadow-sm shadow-ink-900/20 hover:bg-ink-800 focus-visible:outline-ink-900 disabled:bg-ink-300 disabled:shadow-none',
+  primary: 'bg-night-900 text-white shadow-sm shadow-night-900/20 hover:bg-night-800 focus-visible:outline-night-900 disabled:bg-ink-300 disabled:shadow-none',
   brand: 'bg-brand-500 text-white shadow-sm shadow-brand-500/30 hover:bg-brand-600 focus-visible:outline-brand-600 disabled:bg-brand-200 disabled:text-ink-400 disabled:shadow-none',
   outline: 'border border-ink-200 text-ink-700 hover:bg-ink-50 focus-visible:outline-ink-300 disabled:text-ink-300',
   ghost: 'text-ink-600 hover:bg-ink-100 focus-visible:outline-ink-300',
-  danger: 'border border-red-200 text-red-600 hover:bg-red-50 focus-visible:outline-red-300',
+  danger: 'border border-red-200 text-red-600 hover:bg-red-50 focus-visible:outline-red-300 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10',
   success: 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25 hover:bg-emerald-500 focus-visible:outline-emerald-600 disabled:bg-emerald-200 disabled:shadow-none',
 }
 

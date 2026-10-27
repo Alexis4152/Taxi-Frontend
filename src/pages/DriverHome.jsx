@@ -82,7 +82,11 @@ function PaymentDueCard({ info }) {
   if (!info) return null
   const blocked = info.paymentBlocked
   const hasDebt = Number(info.pendingAmount) > 0
-  const cardTone = blocked ? 'border-2 border-red-400 bg-red-50/40' : hasDebt ? 'border-2 border-amber-300 bg-amber-50/40' : ''
+  const cardTone = blocked
+    ? 'border-2 border-red-400 bg-red-50/40 dark:border-red-500/40 dark:bg-red-500/10'
+    : hasDebt
+      ? 'border-2 border-amber-300 bg-amber-50/40 dark:border-amber-500/40 dark:bg-amber-500/10'
+      : ''
   const subtitle = blocked
     ? 'Conexión bloqueada hasta confirmar tu pago'
     : hasDebt
@@ -101,7 +105,7 @@ function PaymentDueCard({ info }) {
       )}
       {hasDebt &&
         (info.clabe ? (
-          <div className="mt-3 rounded-xl bg-white/70 px-3 py-2.5 text-sm text-ink-700">
+          <div className="mt-3 rounded-xl bg-surface/70 px-3 py-2.5 text-sm text-ink-700">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">CLABE para transferir</p>
             <p className="font-mono text-base font-semibold tracking-wide">{info.clabe}</p>
           </div>
@@ -131,7 +135,7 @@ function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange,
           {profile.photoUrl ? (
             <img src={`${API_URL}${profile.photoUrl}`} alt="" className="h-20 w-20 rounded-full object-cover" />
           ) : (
-            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-ink-900 text-2xl font-bold text-white">
+            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-night-900 text-2xl font-bold text-white">
               {profile.name.charAt(0).toUpperCase()}
             </span>
           )}
@@ -140,7 +144,7 @@ function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange,
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingPhoto}
             aria-label="Cambiar foto de perfil"
-            className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-ink-900 text-white shadow-sm hover:bg-ink-700 disabled:opacity-60"
+            className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-night-900 text-white shadow-sm hover:bg-night-700 disabled:opacity-60"
           >
             {uploadingPhoto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
           </button>
@@ -193,7 +197,7 @@ function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange,
       <button
         type="button"
         onClick={onRequestDeletion}
-        className="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+        className="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
       >
         Eliminar mi cuenta
       </button>
@@ -747,7 +751,7 @@ export default function DriverHome() {
               <Textarea rows={2} value={taxiChangeForm.reason} onChange={(e) => setTaxiChangeForm((f) => ({ ...f, reason: e.target.value }))} />
             </div>
             {taxiChangeError && (
-              <div className="rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700">{taxiChangeError}</div>
+              <div className="rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">{taxiChangeError}</div>
             )}
             <Button type="submit" variant="brand" className="w-full" loading={taxiChangeBusy}>
               Enviar solicitud
@@ -763,10 +767,10 @@ export default function DriverHome() {
           offers
             .filter((o) => o.cancelledByPassenger)
             .map((o) => (
-              <Card key={o.offerId} className="border-2 border-red-200 bg-red-50/40">
+              <Card key={o.offerId} className="border-2 border-red-200 bg-red-50/40 dark:border-red-500/30 dark:bg-red-500/10">
                 <div className="flex items-center gap-2">
-                  <XCircle className="h-4 w-4 shrink-0 text-red-600" />
-                  <p className="text-sm font-semibold text-red-700">Viaje cancelado por el pasajero</p>
+                  <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">Viaje cancelado por el pasajero</p>
                 </div>
                 <p className="mt-1 text-xs text-ink-500">{o.originAddress}</p>
               </Card>
@@ -779,7 +783,7 @@ export default function DriverHome() {
           const activeOffers = offers.filter((o) => !o.cancelledByPassenger)
           const offer = activeOffers[0]
           return (
-            <Card className="relative overflow-hidden border-2 border-brand-500 bg-brand-50/40 animate-fade-in-up">
+            <Card className="relative overflow-hidden border-2 border-brand-500 bg-brand-50/40 animate-fade-in-up dark:bg-brand-500/10">
               <div className="absolute inset-x-0 top-0 h-1 bg-brand-500" />
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -814,7 +818,7 @@ export default function DriverHome() {
                 )}
               </div>
               {(offer.babySeat || offer.moreThanFourPassengers || offer.hasPet || offer.comments) && (
-                <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
+                <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
                   {offer.babySeat && (
                     <p className="flex items-center gap-1.5">
                       <Baby className="h-3.5 w-3.5 shrink-0" /> Silla de bebé
@@ -863,7 +867,7 @@ export default function DriverHome() {
         })()}
 
         {!activeTrip && !finishedTrip && showWelcome && (
-          <div className="relative animate-fade-in-up rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3.5 text-ink-800">
+          <div className="relative animate-fade-in-up rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3.5 text-ink-800 dark:border-brand-500/30 dark:bg-brand-500/10">
             <button onClick={() => setShowWelcome(false)} className="absolute right-3 top-3 text-ink-400 hover:text-ink-600">
               <X className="h-4 w-4" />
             </button>
@@ -881,7 +885,7 @@ export default function DriverHome() {
           <Card className="flex items-center gap-3">
             <span
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
-                online ? 'bg-emerald-100 text-emerald-600' : 'bg-ink-100 text-ink-400'
+                online ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400' : 'bg-ink-100 text-ink-400'
               }`}
             >
               <Power className="h-5 w-5" />
@@ -914,7 +918,9 @@ export default function DriverHome() {
                     loadStats(opt.value)
                   }}
                   className={`flex min-h-9 items-center justify-center rounded-xl border-2 text-xs font-semibold transition ${
-                    statsPeriod === opt.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                    statsPeriod === opt.value
+                      ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300'
+                      : 'border-ink-100 text-ink-500 hover:border-ink-200'
                   }`}
                 >
                   {opt.label}
@@ -971,14 +977,14 @@ export default function DriverHome() {
         )}
 
         {!activeTrip && !finishedTrip && currentTaxi === null && (
-          <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
             <Car className="mt-0.5 h-4 w-4 shrink-0" />
             Por el momento no tienes un taxi asignado. Pide a tu administrador que te asigne un turno para poder conectarte.
           </div>
         )}
 
         {!activeTrip && !finishedTrip && currentTaxi && currentTaxi.active === false && (
-          <div className="flex items-start gap-2 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700">
+          <div className="flex items-start gap-2 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             Tu unidad (Unidad {currentTaxi.unitNumber}) fue bloqueada por el administrador
             {currentTaxi.deactivationReason ? `. Motivo: ${currentTaxi.deactivationReason}` : ', contacta al administrador'}.
@@ -986,14 +992,14 @@ export default function DriverHome() {
         )}
 
         {error && (
-          <div className="flex items-start gap-2 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700">
+          <div className="flex items-start gap-2 rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             {error}
           </div>
         )}
 
         {online && geoError && (
-          <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             {geoError}
           </div>
@@ -1031,7 +1037,7 @@ export default function DriverHome() {
                 {activeTrip.passengerPhotoUrl ? (
                   <img src={`${API_URL}${activeTrip.passengerPhotoUrl}`} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
                 ) : (
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-900 text-white">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-night-900 text-white">
                     <User className="h-4.5 w-4.5" />
                   </span>
                 )}
@@ -1045,7 +1051,7 @@ export default function DriverHome() {
                   {activeTrip.passengerPhone && (
                     <a
                       href={`tel:${activeTrip.passengerPhone}`}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm hover:bg-ink-100"
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-ink-600 shadow-sm hover:bg-ink-100"
                       aria-label="Llamar al pasajero"
                     >
                       <Phone className="h-4 w-4" />
@@ -1058,7 +1064,7 @@ export default function DriverHome() {
                         setChatOpen(true)
                         markAllRead()
                       }}
-                      className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-600 shadow-sm hover:bg-ink-100"
+                      className="relative flex h-9 w-9 items-center justify-center rounded-full bg-surface text-ink-600 shadow-sm hover:bg-ink-100"
                       aria-label="Chatear con el pasajero"
                     >
                       <MessageCircle className="h-4 w-4" />
@@ -1082,7 +1088,7 @@ export default function DriverHome() {
                 </p>
               </div>
               {(activeTrip.babySeat || activeTrip.moreThanFourPassengers || activeTrip.hasPet || activeTrip.specialComments) && (
-                <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700">
+                <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
                   {activeTrip.babySeat && (
                     <p className="flex items-center gap-1.5">
                       <Baby className="h-3.5 w-3.5 shrink-0" /> Silla de bebé

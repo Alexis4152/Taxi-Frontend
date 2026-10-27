@@ -33,38 +33,51 @@ export function useConfirm() {
     resolver.current = null
   }
 
-  const ConfirmDialogElement = () => (
-    <Modal open={Boolean(state)} onClose={() => handle(false)} title={state?.title}>
-      <div className="space-y-4">
-        <div className="flex items-start gap-3">
-          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${state?.danger ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
-            <AlertTriangle className="h-4.5 w-4.5" />
-          </span>
-          <p className="text-sm text-ink-600">{state?.message}</p>
-        </div>
-        {state?.requireInput && (
-          <div>
-            {state.inputLabel && <Label>{state.inputLabel}</Label>}
-            <Textarea
-              rows={2}
-              maxLength={300}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder={state.inputPlaceholder}
-            />
+  // Se guarda el estado/handle "mas reciente" en un ref para que el componente devuelto abajo
+  // tenga SIEMPRE la misma identidad entre renders. Si no, cada tecla escrita en el textarea
+  // actualizaba inputValue -> re-renderizaba el componente que llama a useConfirm() ->
+  // ConfirmDialogElement se volvia a crear como una funcion nueva -> React la trataba como un
+  // componente distinto y remontaba el Modal entero desde cero, perdiendo el foco despues de
+  // cada letra (eso es lo que se veia en "bloquear/desbloquear" al escribir el motivo).
+  const latest = useRef()
+  latest.current = { state, inputValue, handle }
+
+  const ConfirmDialogElement = useRef(() => {
+    const { state, inputValue, handle } = latest.current
+    return (
+      <Modal open={Boolean(state)} onClose={() => handle(false)} title={state?.title}>
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${state?.danger ? 'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400' : 'bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400'}`}>
+              <AlertTriangle className="h-4.5 w-4.5" />
+            </span>
+            <p className="text-sm text-ink-600">{state?.message}</p>
           </div>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="outline" onClick={() => handle(false)}>
-            Cancelar
-          </Button>
-          <Button variant={state?.danger ? 'danger' : 'brand'} onClick={() => handle(true)}>
-            {state?.confirmLabel}
-          </Button>
+          {state?.requireInput && (
+            <div>
+              {state.inputLabel && <Label>{state.inputLabel}</Label>}
+              <Textarea
+                rows={2}
+                maxLength={300}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder={state.inputPlaceholder}
+                autoFocus
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => handle(false)}>
+              Cancelar
+            </Button>
+            <Button variant={state?.danger ? 'danger' : 'brand'} onClick={() => handle(true)}>
+              {state?.confirmLabel}
+            </Button>
+          </div>
         </div>
-      </div>
-    </Modal>
-  )
+      </Modal>
+    )
+  }).current
 
   return { confirm, ConfirmDialogElement }
 }

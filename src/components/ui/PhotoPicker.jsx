@@ -29,7 +29,7 @@ export default function PhotoPicker({ value, onChange, existingUrl, size = 96, r
             <User className="h-8 w-8" />
           )}
         </button>
-        <span className="pointer-events-none absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-ink-900 text-white ring-2 ring-white">
+        <span className="pointer-events-none absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-night-900 text-white ring-2 ring-surface">
           <Camera className="h-3 w-3" />
         </span>
       </div>

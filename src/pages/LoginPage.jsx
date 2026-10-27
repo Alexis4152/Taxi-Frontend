@@ -6,6 +6,7 @@ import BrandPanel from '../components/ui/BrandPanel'
 import Logo from '../components/ui/Logo'
 import { Label, Input } from '../components/ui/Field'
 import Button from '../components/ui/Button'
+import ThemeToggle from '../components/ui/ThemeToggle'
 import { useConfirm } from '../components/ui/ConfirmDialog'
 
 const SESSION_OPEN_MESSAGE = 'Ya cuentas con una sesion abierta'
@@ -73,7 +74,11 @@ export default function LoginPage() {
         description="Comparte tu ubicación, elige tu destino y ve llegar a tu operador en tiempo real, con la tarifa clara antes de confirmar."
       />
 
-      <div className="flex flex-1 flex-col items-center justify-center px-6 py-10">
+      <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-10">
+        <div className="absolute right-4 top-4 w-44 sm:right-6 sm:top-6">
+          <ThemeToggle />
+        </div>
+
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
             <Logo />
@@ -125,21 +130,21 @@ export default function LoginPage() {
             </div>
 
             {location.state?.registered && (
-              <div className="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700">
+              <div className="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
                 <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 Tu cuenta fue creada. Inicia sesión para continuar.
               </div>
             )}
 
             {location.state?.photoUploadFailed && (
-              <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 No se pudo subir tu foto durante el registro. Podrás subirla desde tu perfil.
               </div>
             )}
 
             {error && (
-              <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700">
+              <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {error}
               </div>

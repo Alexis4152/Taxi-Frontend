@@ -27,7 +27,7 @@ export default function TripStatusStepper({ status }) {
                     ? active
                       ? 'border-brand-500 bg-brand-500 text-white'
                       : 'border-emerald-500 bg-emerald-500 text-white'
-                    : 'border-ink-200 bg-white text-ink-300'
+                    : 'border-ink-200 bg-surface text-ink-300'
                 }`}
               >
                 <Icon className="h-4 w-4" />

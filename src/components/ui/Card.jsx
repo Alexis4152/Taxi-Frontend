@@ -1,7 +1,7 @@
 export default function Card({ className = '', padded = true, children }) {
   return (
     <div
-      className={`rounded-2xl border border-ink-100 bg-white shadow-sm shadow-ink-900/[0.04] transition-shadow duration-200 ${padded ? 'p-5' : ''} ${className}`}
+      className={`rounded-2xl border border-ink-100 bg-surface shadow-sm shadow-ink-900/[0.04] transition-shadow duration-200 ${padded ? 'p-5' : ''} ${className}`}
     >
       {children}
     </div>

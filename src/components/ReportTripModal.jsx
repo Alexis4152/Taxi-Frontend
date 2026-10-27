@@ -79,7 +79,7 @@ export default function ReportTripModal({ open, onClose, onSubmit }) {
               placeholder="Describe brevemente el problema..."
             />
           </div>
-          {error && <div className="rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700">{error}</div>}
+          {error && <div className="rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">{error}</div>}
           <Button type="submit" variant="brand" className="w-full" loading={busy}>
             Enviar reporte
           </Button>

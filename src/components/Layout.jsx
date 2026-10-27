@@ -3,6 +3,7 @@ import { LogOut, ChevronDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Logo from './ui/Logo'
+import ThemeToggle from './ui/ThemeToggle'
 
 const ROLE_LABELS = {
   SUPER_ADMIN: 'Super Admin',
@@ -12,10 +13,10 @@ const ROLE_LABELS = {
 }
 
 const ROLE_TONES = {
-  SUPER_ADMIN: 'bg-ink-900 text-white',
-  ADMIN: 'bg-blue-100 text-blue-700',
-  DRIVER: 'bg-brand-100 text-brand-800',
-  PASSENGER: 'bg-emerald-100 text-emerald-700',
+  SUPER_ADMIN: 'bg-night-900 text-white',
+  ADMIN: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  DRIVER: 'bg-brand-100 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300',
+  PASSENGER: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
 }
 
 // El pasajero, el super admin y el operador ven siempre la marca de la plataforma; solo el admin
@@ -40,7 +41,7 @@ function OrgBrand({ user }) {
           className="h-9 w-9 shrink-0 rounded-xl object-cover"
         />
       ) : (
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ink-900 text-sm font-bold text-white">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-night-900 text-sm font-bold text-white">
           {user.organizationName.charAt(0).toUpperCase()}
         </span>
       )}
@@ -64,7 +65,7 @@ export default function Layout({ title, subtitle, sidebar, wide = false, bottomB
 
   return (
     <div className="min-h-screen bg-ink-50">
-      <header className="safe-top sticky top-0 z-20 border-b border-ink-100 bg-white/85 backdrop-blur">
+      <header className="safe-top sticky top-0 z-20 border-b border-ink-100 bg-surface/85 backdrop-blur">
         <div className={`mx-auto flex items-center justify-between px-4 py-3 sm:px-6 ${wide ? 'max-w-7xl' : 'max-w-3xl'}`}>
           <div className="flex min-w-0 items-center gap-4">
             <OrgBrand user={user} />
@@ -82,7 +83,7 @@ export default function Layout({ title, subtitle, sidebar, wide = false, bottomB
                 onClick={() => setMenuOpen((v) => !v)}
                 className="flex items-center gap-2 rounded-full border border-ink-100 py-1 pl-1 pr-2 hover:bg-ink-50"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-900 text-xs font-bold text-white">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-night-900 text-xs font-bold text-white">
                   {user.name.charAt(0).toUpperCase()}
                 </span>
                 <span className="hidden text-left sm:block">
@@ -94,7 +95,7 @@ export default function Layout({ title, subtitle, sidebar, wide = false, bottomB
               {menuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-lg shadow-ink-900/10">
+                  <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-ink-100 bg-surface shadow-lg shadow-ink-900/10">
                     <div className="border-b border-ink-100 px-4 py-3">
                       <p className="text-sm font-semibold text-ink-900">{user.name}</p>
                       <p className="text-xs text-ink-400">{user.phone}</p>
@@ -102,9 +103,13 @@ export default function Layout({ title, subtitle, sidebar, wide = false, bottomB
                         {ROLE_LABELS[user.role] || user.role}
                       </span>
                     </div>
+                    <div className="border-b border-ink-100 px-4 py-3">
+                      <p className="mb-1.5 text-[11px] font-semibold text-ink-400">Tema</p>
+                      <ThemeToggle />
+                    </div>
                     <button
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50"
+                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
                     >
                       <LogOut className="h-4 w-4" />
                       Cerrar sesion
@@ -129,7 +134,7 @@ export default function Layout({ title, subtitle, sidebar, wide = false, bottomB
       </div>
 
       {bottomBar && (
-        <div className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-ink-100 bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
+        <div className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-ink-100 bg-surface/95 px-4 py-3 backdrop-blur sm:px-6">
           <div className={`mx-auto ${wide ? 'max-w-7xl' : 'max-w-3xl'}`}>{bottomBar}</div>
         </div>
       )}

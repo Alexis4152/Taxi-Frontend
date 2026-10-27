@@ -77,11 +77,18 @@ export default function AddressAutocomplete({ value, onChange, onSelect, near, p
           e.target.select()
           if (suggestions.length > 0) setOpen(true)
         }}
+        onMouseUp={(e) => {
+          // onFocus de arriba solo dispara la primera vez que se entra al campo - sin esto, un
+          // clic posterior sobre el campo ya enfocado solo movia el cursor (y el doble clic solo
+          // seleccionaba una palabra), en vez de volver a seleccionar todo el texto.
+          e.preventDefault()
+          e.target.select()
+        }}
         placeholder={placeholder}
         endAdornment={loading ? <Loader2 className="h-4 w-4 animate-spin text-ink-400" /> : null}
       />
       {open && suggestions.length > 0 && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-ink-100 bg-white shadow-lg">
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-ink-100 bg-surface shadow-lg">
           {suggestions.map((s, i) => (
             <button
               key={i}

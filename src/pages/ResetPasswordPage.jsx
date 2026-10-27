@@ -63,7 +63,7 @@ export default function ResetPasswordPage() {
             </div>
           ) : done ? (
             <div className="text-center sm:text-left">
-              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 sm:mx-0">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 sm:mx-0">
                 <CheckCircle2 className="h-6 w-6" />
               </span>
               <h2 className="font-display mt-4 text-2xl font-bold text-ink-900">Contraseña actualizada</h2>
@@ -88,7 +88,7 @@ export default function ResetPasswordPage() {
                 </div>
 
                 {error && (
-                  <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700">
+                  <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">
                     <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     {error}
                   </div>

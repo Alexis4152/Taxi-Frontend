@@ -85,7 +85,7 @@ export default function RatingForm({ tripId, targetLabel, onDone, showTip = fals
       )}
       <Textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comentario (opcional)" rows={2} />
       {error && (
-        <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700">
+        <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">
           <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {error}
         </div>

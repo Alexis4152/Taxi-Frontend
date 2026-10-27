@@ -150,7 +150,9 @@ export default function RegisterPage() {
               type="button"
               onClick={() => setRole('PASSENGER')}
               className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-semibold transition ${
-                role === 'PASSENGER' ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                role === 'PASSENGER'
+                  ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300'
+                  : 'border-ink-100 text-ink-500 hover:border-ink-200'
               }`}
             >
               <UserRound className="h-4 w-4" /> Pasajero
@@ -159,7 +161,9 @@ export default function RegisterPage() {
               type="button"
               onClick={() => setRole('DRIVER')}
               className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 py-2.5 text-sm font-semibold transition ${
-                role === 'DRIVER' ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-ink-100 text-ink-500 hover:border-ink-200'
+                role === 'DRIVER'
+                  ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300'
+                  : 'border-ink-100 text-ink-500 hover:border-ink-200'
               }`}
             >
               <Car className="h-4 w-4" /> Operador
@@ -310,7 +314,7 @@ export default function RegisterPage() {
             </label>
 
             {error && (
-              <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700">
+              <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {error}
               </div>
