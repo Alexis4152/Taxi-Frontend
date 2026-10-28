@@ -26,3 +26,13 @@ export const DEFAULT_MAP_CENTER = {
   lng: Number(import.meta.env.VITE_DEFAULT_MAP_LNG) || -99.5392,
 }
 export const DEFAULT_MAP_ZOOM = Number(import.meta.env.VITE_DEFAULT_MAP_ZOOM) || 13
+
+// Datos del responsable que aparecen en el aviso de privacidad (/privacidad). Lo que va entre
+// corchetes es un pendiente: debe reemplazarse por los datos legales reales (via estas variables
+// de entorno o aqui mismo) antes de publicar el aviso en produccion.
+export const PRIVACY_CONTROLLER = {
+  name: import.meta.env.VITE_PRIVACY_CONTROLLER_NAME || '[Razón social del responsable]',
+  address: import.meta.env.VITE_PRIVACY_CONTROLLER_ADDRESS || '[Domicilio fiscal completo]',
+  email: import.meta.env.VITE_PRIVACY_EMAIL || '[correo de privacidad]',
+  lastUpdated: import.meta.env.VITE_PRIVACY_LAST_UPDATED || '27 de octubre de 2026',
+}

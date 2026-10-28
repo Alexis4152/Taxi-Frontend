@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Power,
   MapPin,
@@ -26,6 +26,7 @@ import {
   Users,
   PawPrint,
   AlertTriangle,
+  Accessibility,
   Camera,
   Loader2,
   Lock,
@@ -207,6 +208,7 @@ function ProfileSidebar({ profile, currentTaxi, onOpenRatings, onOpenTaxiChange,
 
 export default function DriverHome() {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const location = useLocation()
   const [online, setOnline] = useState(false)
   const { position, error: geoError } = useGeolocation(online)
@@ -261,17 +263,20 @@ export default function DriverHome() {
     const ok = await confirm({
       title: 'Eliminar mi cuenta',
       message:
-        'Tu acceso se bloqueará de inmediato y quedará en revisión para que el administrador apruebe el borrado definitivo de tus datos. Esta acción no se puede deshacer una vez aprobada. ¿Continuar?',
+        'Tu acceso se bloqueará de inmediato y se registrará una solicitud de cancelación con folio. Al aprobarse, tus datos personales se eliminarán (los registros de viajes y pagos se conservan sin datos que te identifiquen, por obligación legal). ¿Continuar?',
       danger: true,
       confirmLabel: 'Eliminar mi cuenta',
     })
     if (!ok) return
+    let folio = null
     try {
-      await driverApi.requestAccountDeletion()
+      const { data } = await driverApi.requestAccountDeletion()
+      folio = data.data?.folio
     } catch (err) {
       setError(err.response?.data?.message || 'No se pudo solicitar la eliminación')
       return
     }
+    navigate('/login', { replace: true, state: { deletionFolio: folio } })
     await logout()
   }
 
@@ -484,6 +489,18 @@ export default function DriverHome() {
 
   useEffect(() => {
     if (trip && ['COMPLETED', 'CANCELLED'].includes(trip.status)) loadStats()
+    // Al completar un viaje se suma su cobro al saldo, y si con eso llego al limite de viajes sin
+    // pagar el backend lo bloquea y lo saca de linea en ese momento - se refleja de una vez aqui
+    // (monto en rojo y boton de conectarse bloqueado) en vez de esperar al siguiente ping.
+    if (trip?.status === 'COMPLETED') {
+      driverApi
+        .paymentInfo()
+        .then(({ data }) => {
+          setPaymentInfo(data.data)
+          if (data.data.paymentBlocked) setOnline(false)
+        })
+        .catch(() => {})
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip?.status])
 
@@ -782,12 +799,20 @@ export default function DriverHome() {
           // bienvenida/estado/estadisticas) para que no se tenga que hacer scroll para verla.
           const activeOffers = offers.filter((o) => !o.cancelledByPassenger)
           const offer = activeOffers[0]
+          const hasRequirements = hasTripRequirements({ ...offer, wheelchair: offer.requiresWheelchairAccessible })
           return (
-            <Card className="relative overflow-hidden border-2 border-brand-500 bg-brand-50/40 animate-fade-in-up dark:bg-brand-500/10">
-              <div className="absolute inset-x-0 top-0 h-1 bg-brand-500" />
+            <Card
+              className={`relative overflow-hidden border-2 animate-fade-in-up ${
+                hasRequirements
+                  ? 'border-amber-500 bg-amber-50/40 dark:bg-amber-500/10'
+                  : 'border-brand-500 bg-brand-50/40 dark:bg-brand-500/10'
+              }`}
+            >
+              <div className={`absolute inset-x-0 top-0 h-1 ${hasRequirements ? 'bg-amber-500' : 'bg-brand-500'}`} />
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Badge tone="brand">Nueva solicitud</Badge>
+                  {hasRequirements && <Badge tone="warning">Requisitos especiales</Badge>}
                   {offer.wasScheduled && <Badge tone="info">Programado</Badge>}
                   {activeOffers.length > 1 && <Badge tone="neutral">+{activeOffers.length - 1} más</Badge>}
                 </div>
@@ -817,30 +842,14 @@ export default function DriverHome() {
                   </>
                 )}
               </div>
-              {(offer.babySeat || offer.moreThanFourPassengers || offer.hasPet || offer.comments) && (
-                <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-                  {offer.babySeat && (
-                    <p className="flex items-center gap-1.5">
-                      <Baby className="h-3.5 w-3.5 shrink-0" /> Silla de bebé
-                    </p>
-                  )}
-                  {offer.moreThanFourPassengers && (
-                    <p className="flex items-center gap-1.5">
-                      <Users className="h-3.5 w-3.5 shrink-0" /> Más de 4 pasajeros
-                    </p>
-                  )}
-                  {offer.hasPet && (
-                    <p className="flex items-center gap-1.5">
-                      <PawPrint className="h-3.5 w-3.5 shrink-0" /> Lleva una mascota
-                    </p>
-                  )}
-                  {offer.comments && (
-                    <p className="flex items-start gap-1.5">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {offer.comments}
-                    </p>
-                  )}
-                </div>
-              )}
+              <TripRequirements
+                prominent
+                babySeat={offer.babySeat}
+                moreThanFourPassengers={offer.moreThanFourPassengers}
+                hasPet={offer.hasPet}
+                wheelchair={offer.requiresWheelchairAccessible}
+                comments={offer.comments}
+              />
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
@@ -1087,30 +1096,13 @@ export default function DriverHome() {
                   <span className="truncate">{activeTrip.destinationAddress}</span>
                 </p>
               </div>
-              {(activeTrip.babySeat || activeTrip.moreThanFourPassengers || activeTrip.hasPet || activeTrip.specialComments) && (
-                <div className="mt-3 space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-                  {activeTrip.babySeat && (
-                    <p className="flex items-center gap-1.5">
-                      <Baby className="h-3.5 w-3.5 shrink-0" /> Silla de bebé
-                    </p>
-                  )}
-                  {activeTrip.moreThanFourPassengers && (
-                    <p className="flex items-center gap-1.5">
-                      <Users className="h-3.5 w-3.5 shrink-0" /> Más de 4 pasajeros
-                    </p>
-                  )}
-                  {activeTrip.hasPet && (
-                    <p className="flex items-center gap-1.5">
-                      <PawPrint className="h-3.5 w-3.5 shrink-0" /> Lleva una mascota
-                    </p>
-                  )}
-                  {activeTrip.specialComments && (
-                    <p className="flex items-start gap-1.5">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {activeTrip.specialComments}
-                    </p>
-                  )}
-                </div>
-              )}
+              <TripRequirements
+                babySeat={activeTrip.babySeat}
+                moreThanFourPassengers={activeTrip.moreThanFourPassengers}
+                hasPet={activeTrip.hasPet}
+                wheelchair={activeTrip.requiresWheelchairAccessible}
+                comments={activeTrip.specialComments}
+              />
               <button
                 type="button"
                 onClick={() => setReportTripId(activeTrip.id)}
@@ -1156,8 +1148,8 @@ export default function DriverHome() {
                 targetLabel={finishedTrip.passengerName}
                 onDone={() => {
                   setRated(true)
-                  // Tras calificar, regresa solo a estar disponible (sigue conectado) sin que el
-                  // operador tenga que tocar nada mas.
+                  // Tras calificar, regresa solo a estar disponible (sigue conectado, salvo que lo
+                  // haya bloqueado el pago pendiente) sin que el operador tenga que tocar nada mas.
                   setTimeout(() => {
                     setTrip(null)
                     setRated(false)
@@ -1172,5 +1164,55 @@ export default function DriverHome() {
         )}
       </div>
     </Layout>
+  )
+}
+
+function hasTripRequirements({ babySeat, moreThanFourPassengers, hasPet, wheelchair, comments }) {
+  return Boolean(babySeat || moreThanFourPassengers || hasPet || wheelchair || comments)
+}
+
+/**
+ * Requisitos que pidio el pasajero. No filtran a que operadores les llega la oferta - les llega a
+ * todos los cercanos - asi que en la oferta (`prominent`) se muestran bien visibles para que el
+ * operador decida si la acepta.
+ */
+function TripRequirements({ prominent = false, ...requirements }) {
+  if (!hasTripRequirements(requirements)) return null
+  const { babySeat, moreThanFourPassengers, hasPet, wheelchair, comments } = requirements
+  const items = [
+    wheelchair && { icon: Accessibility, label: 'Necesita auto con acceso para silla de ruedas' },
+    babySeat && { icon: Baby, label: 'Silla de bebé' },
+    moreThanFourPassengers && { icon: Users, label: 'Más de 4 pasajeros' },
+    hasPet && { icon: PawPrint, label: 'Lleva una mascota' },
+  ].filter(Boolean)
+
+  return (
+    <div
+      className={`mt-3 overflow-hidden rounded-xl border ${
+        prominent ? 'border-amber-400 dark:border-amber-500/50' : 'border-amber-200 dark:border-amber-500/30'
+      }`}
+    >
+      {prominent && (
+        <p className="flex items-center gap-1.5 bg-amber-500 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Revisa antes de aceptar
+        </p>
+      )}
+      <div
+        className={`space-y-1.5 bg-amber-50 p-2.5 font-semibold text-amber-900 dark:bg-amber-500/10 dark:text-amber-300 ${
+          prominent ? 'text-sm' : 'text-xs'
+        }`}
+      >
+        {items.map(({ icon: Icon, label }) => (
+          <p key={label} className="flex items-center gap-2">
+            <Icon className={`shrink-0 ${prominent ? 'h-4 w-4' : 'h-3.5 w-3.5'}`} /> {label}
+          </p>
+        ))}
+        {comments && (
+          <p className="flex items-start gap-2 font-medium">
+            <MessageCircle className={`mt-0.5 shrink-0 ${prominent ? 'h-4 w-4' : 'h-3.5 w-3.5'}`} /> “{comments}”
+          </p>
+        )}
+      </div>
+    </div>
   )
 }

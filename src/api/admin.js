@@ -76,6 +76,10 @@ export const markPassengerPendingDeletion = (id, reason) =>
 export const cancelPassengerPendingDeletion = (id) => api.post(`/api/admin/passengers/${id}/pending-deletion/cancel`)
 export const deletePassengerPermanently = (id) => api.delete(`/api/admin/passengers/${id}`)
 
+// Solicitudes ARCO de datos personales (solo SUPER_ADMIN)
+export const listArcoRequests = () => api.get('/api/admin/arco-requests')
+export const resolveArcoRequest = (id, status, response) => api.patch(`/api/admin/arco-requests/${id}`, { status, response })
+
 // Operadores conectados
 export const listOnlineDrivers = () => api.get('/api/admin/drivers/online')
 

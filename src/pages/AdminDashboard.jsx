@@ -27,6 +27,7 @@ import {
   UserPlus,
   Trash2,
   RotateCcw,
+  ShieldCheck,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import Card, { CardHeader } from '../components/ui/Card'
@@ -45,6 +46,7 @@ import { useAuth } from '../context/AuthContext'
 import MapView from '../components/map/MapView'
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM, LIVE_MAP_POLL_MS } from '../config'
 import * as adminApi from '../api/admin'
+import { ARCO_TYPE_LABEL, ARCO_STATUS, formatDate } from '../data/arco'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const photoSrc = (url) => (url ? `${API_URL}${url}` : null)
@@ -57,10 +59,11 @@ const NAV_SUPER_ADMIN = [
   { key: 'reportes', label: 'Reportes', icon: AlertTriangle },
   { key: 'tarifas', label: 'Tarifas', icon: Banknote },
   { key: 'usuarios', label: 'Usuarios', icon: UserRound },
+  { key: 'arco', label: 'Solicitudes ARCO', icon: ShieldCheck },
   { key: 'mapa', label: 'Mapa en vivo', icon: MapPinned },
   { key: 'configuracion', label: 'Configuración', icon: SlidersHorizontal },
 ]
-const NAV_ADMIN = NAV_SUPER_ADMIN.filter((t) => !['organizaciones', 'mapa', 'usuarios', 'configuracion'].includes(t.key))
+const NAV_ADMIN = NAV_SUPER_ADMIN.filter((t) => !['organizaciones', 'mapa', 'usuarios', 'arco', 'configuracion'].includes(t.key))
 
 export default function AdminDashboard() {
   const { user } = useAuth()
@@ -109,7 +112,7 @@ export default function AdminDashboard() {
     </nav>
   )
 
-  const needsOrgPicker = isSuperAdmin && !['organizaciones', 'mapa', 'usuarios', 'solicitudes', 'reportes', 'configuracion'].includes(tab)
+  const needsOrgPicker = isSuperAdmin && !['organizaciones', 'mapa', 'usuarios', 'arco', 'solicitudes', 'reportes', 'configuracion'].includes(tab)
 
   return (
     <Layout title="Panel de administración" subtitle={isSuperAdmin ? 'Vista global de la plataforma' : user.organizationName} wide sidebar={sidebar}>
@@ -135,6 +138,7 @@ export default function AdminDashboard() {
       {tab === 'configuracion' && isSuperAdmin && <PlatformSettingsSection />}
       {tab === 'tarifas' && <TariffsSection orgId={orgId} isSuperAdmin={isSuperAdmin} organizations={organizations} />}
       {tab === 'usuarios' && isSuperAdmin && <UsersSection />}
+      {tab === 'arco' && isSuperAdmin && <ArcoRequestsSection />}
       {tab === 'mapa' && <LiveMapSection />}
     </Layout>
   )
@@ -782,7 +786,7 @@ function DriversSection({ orgId, isSuperAdmin }) {
   const deleteForever = async (driver) => {
     const ok = await confirm({
       title: 'Eliminar definitivamente',
-      message: `Esta acción no se puede deshacer: se borrarán de forma permanente los datos de ${driver.name}. Si tiene viajes u otros registros asociados, la eliminación se rechazará y seguirá pendiente.`,
+      message: `Esta acción no se puede deshacer: se eliminarán los datos personales de ${driver.name} (nombre, teléfono, correo, foto, cuenta bancaria, domicilio). Sus viajes y cobros se conservan sin datos que lo identifiquen, por obligación legal.`,
       danger: true,
       confirmLabel: 'Eliminar para siempre',
     })
@@ -2080,6 +2084,7 @@ function PlatformSettingsSection() {
   const [paymentDeadlineHour, setPaymentDeadlineHour] = useState('12')
   const [paymentTripThreshold, setPaymentTripThreshold] = useState('20')
   const [fareRoundToMultipleOf5, setFareRoundToMultipleOf5] = useState(false)
+  const [fareRoundToWholePeso, setFareRoundToWholePeso] = useState(false)
   const [referralProgramEnabled, setReferralProgramEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -2100,6 +2105,7 @@ function PlatformSettingsSection() {
     setPaymentDeadlineHour(String(s.paymentDeadlineHour))
     setPaymentTripThreshold(String(s.paymentTripThreshold))
     setFareRoundToMultipleOf5(Boolean(s.fareRoundToMultipleOf5))
+    setFareRoundToWholePeso(Boolean(s.fareRoundToWholePeso))
     setReferralProgramEnabled(Boolean(s.referralProgramEnabled))
   }
 
@@ -2136,6 +2142,7 @@ function PlatformSettingsSection() {
         paymentDeadlineHour: Number(paymentDeadlineHour),
         paymentTripThreshold: Number(paymentTripThreshold),
         fareRoundToMultipleOf5,
+        fareRoundToWholePeso,
         referralProgramEnabled,
       })
       applySettings(data.data)
@@ -2295,6 +2302,16 @@ function PlatformSettingsSection() {
             <p className="text-[11px] text-ink-400">
               Ej. $42.27 se cobra $40, $43.80 se cobra $45 - para que el pasajero pueda pagar en efectivo sin necesitar
               monedas. Aplica a la tarifa base del viaje, no al cobro de servicio.
+            </p>
+            <Switch
+              label="Redondear centavos al peso más cercano"
+              checked={fareRoundToWholePeso}
+              onChange={setFareRoundToWholePeso}
+            />
+            <p className="text-[11px] text-ink-400">
+              Ej. $42.50 se cobra $43, $42.49 se cobra $42. Aplica a la tarifa base y a los cobros de servicio (pasajero
+              y operador), para que ningún monto tenga centavos. Si el múltiplo de 5 también está activo, la tarifa base
+              usa el múltiplo de 5.
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
@@ -2673,7 +2690,7 @@ function UsersSection() {
   const deleteForever = async (p) => {
     const ok = await confirm({
       title: 'Eliminar definitivamente',
-      message: `Esta acción no se puede deshacer: se borrarán de forma permanente los datos de ${p.name}. Si tiene viajes u otros registros asociados, la eliminación se rechazará y seguirá pendiente.`,
+      message: `Esta acción no se puede deshacer: se eliminarán los datos personales de ${p.name} (nombre, teléfono, correo, foto, lugares guardados, contactos y direcciones exactas de sus viajes). Sus viajes se conservan sin datos que lo identifiquen, por obligación legal.`,
       danger: true,
       confirmLabel: 'Eliminar para siempre',
     })
@@ -2777,6 +2794,194 @@ function UsersSection() {
                   />
                 </>
               }
+            />
+          ))
+        )}
+      </Card>
+    </div>
+  )
+}
+
+/* ---------------------------- Solicitudes ARCO ----------------------------- */
+
+const ARCO_ROLE_LABEL = { PASSENGER: 'Pasajero', DRIVER: 'Operador' }
+
+const ARCO_TYPE_GUIDE = {
+  ACCESS: 'El titular puede descargar sus datos desde la app (Privacidad y mis datos). Confírmaselo en la respuesta o atiende lo que pida en específico.',
+  RECTIFICATION: 'Corrige el dato en Operadores o Usuarios (o pide al titular que lo cambie desde su perfil) y describe el cambio en la respuesta.',
+  CANCELLATION:
+    'Para eliminar la cuenta: márcala como pendiente de eliminación en Usuarios u Operadores y usa "Eliminar definitivamente". Esta solicitud se cerrará sola y se avisará al titular.',
+  OPPOSITION: 'Indica a qué finalidad se opone y confirma que se dejó de usar su información para ese fin.',
+  REVOKE_CONSENT: 'Si es el consentimiento de promociones, el titular también puede desactivarlo él mismo desde la app.',
+  LIMIT_USE: 'Indica qué uso o transferencia se limitó.',
+}
+
+function ArcoResolveModal({ request, onClose, onSaved }) {
+  const [status, setStatus] = useState('RESOLVED')
+  const [response, setResponse] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setStatus(request?.status === 'PENDING' ? 'IN_PROGRESS' : 'RESOLVED')
+    setResponse(request?.response || '')
+    setError('')
+  }, [request])
+
+  if (!request) return null
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      await adminApi.resolveArcoRequest(request.id, status, response)
+      onSaved()
+    } catch (err) {
+      setError(err.response?.data?.message || 'No se pudo actualizar la solicitud')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Solicitud ${request.folio}`} subtitle={`${ARCO_TYPE_LABEL[request.type]} · ${request.userName}`} wide>
+      <form onSubmit={handleSave} className="space-y-4">
+        <div className="rounded-xl bg-ink-50 px-3 py-2.5 text-sm text-ink-700">{request.description}</div>
+        <p className="text-xs text-ink-500">
+          {ARCO_ROLE_LABEL[request.userRole] || request.userRole} · {request.userPhone}
+          {request.userEmail ? ` · ${request.userEmail}` : ''} · recibida el {formatDate(request.createdAt)} · vence el{' '}
+          {formatDate(request.dueAt)}
+        </p>
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">
+          {ARCO_TYPE_GUIDE[request.type]}
+        </div>
+        <div>
+          <Label>Estatus</Label>
+          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="IN_PROGRESS">En proceso (sin cerrar)</option>
+            <option value="RESOLVED">Atendida</option>
+            <option value="REJECTED">Rechazada</option>
+          </Select>
+        </div>
+        <div>
+          <Label hint={status === 'IN_PROGRESS' ? 'opcional' : 'se envía al titular por correo'}>Respuesta</Label>
+          <Textarea
+            rows={4}
+            maxLength={1000}
+            required={status !== 'IN_PROGRESS'}
+            value={response}
+            onChange={(e) => setResponse(e.target.value)}
+            placeholder="Explica qué se hizo o por qué no procede la solicitud."
+          />
+        </div>
+        {error && <AlertBox>{error}</AlertBox>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="brand" loading={saving}>
+            Guardar
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function ArcoRequestsSection() {
+  const [requests, setRequests] = useState([])
+  const [view, setView] = useState('OPEN')
+  const [selected, setSelected] = useState(null)
+
+  const load = () => adminApi.listArcoRequests().then(({ data }) => setRequests(data.data))
+  useEffect(() => {
+    load()
+  }, [])
+
+  const isOpen = (r) => r.status === 'PENDING' || r.status === 'IN_PROGRESS'
+  const now = new Date()
+  const isOverdue = (r) => isOpen(r) && new Date(r.dueAt) < now
+  const isDueSoon = (r) => isOpen(r) && !isOverdue(r) && new Date(r.dueAt) - now < 5 * 24 * 60 * 60 * 1000
+
+  const open = requests.filter(isOpen)
+  const closed = requests.filter((r) => !isOpen(r))
+  const visible = view === 'OPEN' ? open : closed
+
+  return (
+    <div className="space-y-5">
+      <ArcoResolveModal
+        request={selected}
+        onClose={() => setSelected(null)}
+        onSaved={() => {
+          setSelected(null)
+          load()
+        }}
+      />
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatCard icon={ShieldCheck} label="Abiertas" value={open.length} tone="brand" onClick={() => setView('OPEN')} />
+        <StatCard icon={AlertTriangle} label="Vencidas" value={open.filter(isOverdue).length} tone="danger" onClick={() => setView('OPEN')} />
+        <StatCard icon={CheckCircle2} label="Cerradas" value={closed.length} tone="success" onClick={() => setView('CLOSED')} />
+      </div>
+
+      <Card padded={false}>
+        <CardHeader
+          className="px-5 pt-5"
+          icon={ShieldCheck}
+          title="Solicitudes ARCO"
+          subtitle="Derechos sobre datos personales · plazo legal de respuesta: 20 días hábiles"
+        />
+        <div className="flex gap-2 px-5 pb-3">
+          {[
+            { value: 'OPEN', label: `Abiertas (${open.length})` },
+            { value: 'CLOSED', label: `Cerradas (${closed.length})` },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setView(opt.value)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                view === opt.value ? 'bg-night-900 text-white' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {visible.length === 0 ? (
+          <div className="px-5 pb-5">
+            <EmptyState
+              icon={ShieldCheck}
+              title={view === 'OPEN' ? 'Sin solicitudes abiertas' : 'Sin solicitudes cerradas'}
+              description="Aquí aparecen las solicitudes que pasajeros y operadores envían desde Privacidad y mis datos, o al usar Eliminar mi cuenta."
+            />
+          </div>
+        ) : (
+          visible.map((r) => (
+            <ListRow
+              key={r.id}
+              onClick={isOpen(r) ? () => setSelected(r) : undefined}
+              avatar={
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-900/[0.05] text-ink-600">
+                  <ShieldCheck className="h-4.5 w-4.5" />
+                </span>
+              }
+              title={`${r.folio} · ${ARCO_TYPE_LABEL[r.type]}`}
+              subtitle={
+                <>
+                  {r.userName} ({ARCO_ROLE_LABEL[r.userRole] || r.userRole}) · recibida el {formatDate(r.createdAt)}
+                  {isOpen(r) ? (
+                    <span className={isOverdue(r) ? 'font-semibold text-red-600' : isDueSoon(r) ? 'font-semibold text-amber-600' : ''}>
+                      {' · '}vence el {formatDate(r.dueAt)}
+                      {isOverdue(r) ? ' (vencida)' : ''}
+                    </span>
+                  ) : (
+                    ` · cerrada el ${formatDate(r.resolvedAt)}`
+                  )}
+                  <span className="mt-0.5 block truncate text-ink-400">{r.response && !isOpen(r) ? `Respuesta: ${r.response}` : r.description}</span>
+                </>
+              }
+              right={<Badge tone={ARCO_STATUS[r.status]?.tone}>{ARCO_STATUS[r.status]?.label}</Badge>}
             />
           ))
         )}

@@ -136,6 +136,14 @@ export default function LoginPage() {
               </div>
             )}
 
+            {location.state?.deletionFolio && (
+              <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Tu cuenta quedó bloqueada y en revisión para su eliminación. Folio de tu solicitud:{' '}
+                {location.state.deletionFolio}. Te avisaremos por correo cuando se complete.
+              </div>
+            )}
+
             {location.state?.photoUploadFailed && (
               <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -159,6 +167,11 @@ export default function LoginPage() {
             ¿No tienes cuenta?{' '}
             <Link to="/register" className="font-semibold text-ink-900 hover:underline">
               Regístrate
+            </Link>
+          </p>
+          <p className="mt-3 text-center text-[11px] text-ink-400">
+            <Link to="/privacidad" className="hover:text-ink-700 hover:underline">
+              Aviso de privacidad
             </Link>
           </p>
         </div>

@@ -1,13 +1,12 @@
-import { Sun, Moon, MonitorSmartphone } from 'lucide-react'
+import { Sun, Moon } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
 
 const OPTIONS = [
   { value: 'light', label: 'Claro', icon: Sun },
   { value: 'dark', label: 'Oscuro', icon: Moon },
-  { value: 'system', label: 'Sistema', icon: MonitorSmartphone },
 ]
 
-// Selector de tema de 3 opciones (claro / oscuro / seguir el sistema). Vive dentro del menu de
+// Selector de tema de 2 opciones (claro / oscuro). Vive dentro del menu de
 // usuario en Layout, asi que aparece igual para los 4 roles (pasajero, operador, admin, super
 // admin) sin tener que repetirlo en cada pantalla.
 export default function ThemeToggle() {

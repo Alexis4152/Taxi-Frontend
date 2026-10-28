@@ -7,6 +7,7 @@ import PassengerHome from './pages/PassengerHome'
 import DriverHome from './pages/DriverHome'
 import AdminDashboard from './pages/AdminDashboard'
 import TrackTripPage from './pages/TrackTripPage'
+import PrivacyNoticePage from './pages/PrivacyNoticePage'
 import PrivateRoute from './components/PrivateRoute'
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/track/:shareToken" element={<TrackTripPage />} />
+      <Route path="/privacidad" element={<PrivacyNoticePage />} />
       <Route
         path="/"
         element={

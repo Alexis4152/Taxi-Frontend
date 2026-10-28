@@ -286,17 +286,20 @@ export default function PassengerHome() {
     const ok = await confirm({
       title: 'Eliminar mi cuenta',
       message:
-        'Tu acceso se bloqueará de inmediato y quedará en revisión para que el administrador apruebe el borrado definitivo de tus datos. Esta acción no se puede deshacer una vez aprobada. ¿Continuar?',
+        'Tu acceso se bloqueará de inmediato y se registrará una solicitud de cancelación con folio. Al aprobarse, tus datos personales se eliminarán (los registros de viajes se conservan sin datos que te identifiquen, por obligación legal). ¿Continuar?',
       danger: true,
       confirmLabel: 'Eliminar mi cuenta',
     })
     if (!ok) return
+    let folio = null
     try {
-      await passengerApi.requestAccountDeletion()
+      const { data } = await passengerApi.requestAccountDeletion()
+      folio = data.data?.folio
     } catch (err) {
       setError(err.response?.data?.message || 'No se pudo solicitar la eliminación')
       return
     }
+    navigate('/login', { replace: true, state: { deletionFolio: folio } })
     await logout()
   }
 

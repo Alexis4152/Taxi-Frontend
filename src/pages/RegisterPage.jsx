@@ -40,6 +40,8 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
+  const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
@@ -69,6 +71,10 @@ export default function RegisterPage() {
       setError('Debes aceptar los terminos y condiciones para continuar')
       return
     }
+    if (!acceptedPrivacy) {
+      setError('Debes aceptar el aviso de privacidad para continuar')
+      return
+    }
     if (form.phone.length !== 10) {
       setError('El teléfono debe tener exactamente 10 dígitos')
       return
@@ -87,6 +93,8 @@ export default function RegisterPage() {
           password: form.password,
           email: form.email,
           acceptedTerms,
+          acceptedPrivacy,
+          marketingOptIn,
           referralCode: form.referralCode || null,
         })
         if (photo) {
@@ -105,6 +113,8 @@ export default function RegisterPage() {
           taxiBrand: form.taxiBrand,
           taxiModel: form.taxiModel,
           acceptedTerms,
+          acceptedPrivacy,
+          marketingOptIn,
           referralCode: form.referralCode || null,
         })
         try {
@@ -313,6 +323,32 @@ export default function RegisterPage() {
               </span>
             </label>
 
+            <label className="flex items-start gap-2 text-xs text-ink-600">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+                checked={acceptedPrivacy}
+                onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+              />
+              <span>
+                He leído y acepto el{' '}
+                <Link to="/privacidad" target="_blank" className="font-semibold text-ink-900 underline underline-offset-2">
+                  aviso de privacidad
+                </Link>
+                .
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2 text-xs text-ink-600">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+                checked={marketingOptIn}
+                onChange={(e) => setMarketingOptIn(e.target.checked)}
+              />
+              <span>Quiero recibir promociones y novedades (opcional).</span>
+            </label>
+
             {error && (
               <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-400">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -320,7 +356,7 @@ export default function RegisterPage() {
               </div>
             )}
 
-            <Button type="submit" variant="brand" size="lg" loading={loading} disabled={!acceptedTerms} className="w-full">
+            <Button type="submit" variant="brand" size="lg" loading={loading} disabled={!acceptedTerms || !acceptedPrivacy} className="w-full">
               {loading ? 'Creando...' : 'Registrarme'}
             </Button>
           </form>
@@ -346,9 +382,16 @@ export default function RegisterPage() {
             que acepta, incluyendo los viajes que se comprometió a realizar en un horario programado.
           </p>
           <p>
-            NexoraTaxis y BITFX actúan como intermediarios tecnológicos entre pasajeros y operadores
+            NexoraTaxis actúa como intermediario tecnológico entre pasajeros y operadores
             independientes u organizaciones de taxis; la responsabilidad de completar el servicio
             solicitado corresponde a las partes que solicitan y aceptan cada viaje.
+          </p>
+          <p>
+            El tratamiento de tus datos personales se rige por nuestro{' '}
+            <Link to="/privacidad" target="_blank" className="font-semibold text-ink-900 underline underline-offset-2">
+              aviso de privacidad
+            </Link>
+            .
           </p>
         </div>
       </Modal>

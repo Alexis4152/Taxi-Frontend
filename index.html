@@ -14,11 +14,7 @@
       // y luego saltar a oscuro (ver ThemeContext.jsx, misma clave de localStorage).
       (function () {
         try {
-          var stored = localStorage.getItem('nexora-theme')
-          var isDark =
-            stored === 'dark' ||
-            (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-          if (isDark) document.documentElement.classList.add('dark')
+          if (localStorage.getItem('nexora-theme') === 'dark') document.documentElement.classList.add('dark')
         } catch (e) {}
       })()
     </script>

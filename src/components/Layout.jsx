@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { LogOut, ChevronDown } from 'lucide-react'
+import { LogOut, ChevronDown, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Logo from './ui/Logo'
 import ThemeToggle from './ui/ThemeToggle'
+import PrivacyCenterModal from './PrivacyCenterModal'
+import PrivacyConsentGate from './PrivacyConsentGate'
 
 const ROLE_LABELS = {
   SUPER_ADMIN: 'Super Admin',
@@ -57,6 +59,10 @@ export default function Layout({ title, subtitle, sidebar, wide = false, bottomB
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
+  // Pasajeros y operadores son los titulares de datos personales (ARCO); el personal
+  // administrativo gestiona esas solicitudes desde el panel, no desde aqui.
+  const isDataSubject = user && ['PASSENGER', 'DRIVER'].includes(user.role)
 
   const handleLogout = async () => {
     await logout()
@@ -65,6 +71,8 @@ export default function Layout({ title, subtitle, sidebar, wide = false, bottomB
 
   return (
     <div className="min-h-screen bg-ink-50">
+      <PrivacyConsentGate />
+      {isDataSubject && <PrivacyCenterModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />}
       <header className="safe-top sticky top-0 z-20 border-b border-ink-100 bg-surface/85 backdrop-blur">
         <div className={`mx-auto flex items-center justify-between px-4 py-3 sm:px-6 ${wide ? 'max-w-7xl' : 'max-w-3xl'}`}>
           <div className="flex min-w-0 items-center gap-4">
@@ -107,6 +115,18 @@ export default function Layout({ title, subtitle, sidebar, wide = false, bottomB
                       <p className="mb-1.5 text-[11px] font-semibold text-ink-400">Tema</p>
                       <ThemeToggle />
                     </div>
+                    {isDataSubject && (
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false)
+                          setPrivacyOpen(true)
+                        }}
+                        className="flex w-full items-center gap-2 border-b border-ink-100 px-4 py-3 text-left text-sm font-medium text-ink-700 hover:bg-ink-50"
+                      >
+                        <ShieldCheck className="h-4 w-4" />
+                        Privacidad y mis datos
+                      </button>
+                    )}
                     <button
                       onClick={handleLogout}
                       className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
